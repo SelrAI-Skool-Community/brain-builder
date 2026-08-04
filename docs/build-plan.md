@@ -24,4 +24,4 @@ Companion to [spec.md](spec.md). No schedule here — this is the work list and 
 - Post drafts + pre-post checklist are already written and parked at `~/selrai/active/brain-builder-drop/drop-week-content.md` (local) — sanity-check them against the shipped feature set before posting.
 - Fail-question criteria are locked (verifiable corpus answer; brain-less Claude fails *confidently*; number / framework / voice coverage) — the literals get authored once the demo brains exist.
 - Demo corpora are fixed: AI expert = Karpathy YouTube + blog; Marketing = mixed-source generic; Hormozi = the prototype's 30-video corpus. Built brains are never distributed (rights stance); members rebuild from prompts.
-- Obsidian graph view is a demo visual only — it does not settle the recommend-Obsidian question (open after v1).
+- Obsidian is the finish-phase graph viewer: a build ends by opening the brain there — installed first if missing, announced in one line, never a dependency and never a failed build — which closes the recommend-Obsidian question (see the `docs/spec.md` changelog).

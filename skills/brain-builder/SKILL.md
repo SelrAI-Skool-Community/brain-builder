@@ -1,0 +1,246 @@
+---
+name: brain-builder
+description: >
+  Build a portable knowledge brain — a standalone folder of markdown that an
+  agent navigates like a wiki, answers from as a subject-matter expert, cites,
+  and admits the limits of. Use this whenever someone wants to build a brain,
+  turn a folder of notes, docs, transcripts or exports into something Claude can
+  answer from, or make an expert on a topic: "build me a brain about X", "turn
+  these files into a brain", "I want Claude to know everything in this folder",
+  "make an expert on Y I can ask questions". Use it too when someone has a pile
+  of material and wants it made genuinely useful rather than summarised once —
+  that is a brain, even when they never use the word. Runs the whole build:
+  intake, source list, plan gate, ingest, wiki, router, attach, demo.
+---
+
+# Brain Builder
+
+Turn a body of source material into a **brain**: a standalone folder of markdown
+at `~/brains/<slug>/` that any harness can attach, that answers as an expert who
+holds the material, cites the page you would edit to fix an error, and says so
+plainly when a question lands inside its domain but outside its corpus.
+
+Invoke by name (`/brain-builder`) or by saying any of it in your own words. One
+paste-in prompt is a complete invocation — if the opening message already tells
+you what the brain is about, what it is built from, where the material lives and
+what the member wants to ask it, **ask nothing** and go straight to Gate 1.
+
+**The v1 ingestion arm is local files** — `.md`, `.txt`, `.csv`, `.json`,
+`.docx`. YouTube, PDFs, web articles and podcasts land in a later arm. When a
+member names one of those, say so in a line and offer what works today: anything
+they have already exported or downloaded into a folder.
+
+## What you are building
+
+```
+~/brains/<slug>/
+  SKILL.md    the generated router — the brain's entire interface
+  index.md    the map: one-liners carrying real numbers, + ## Known gaps
+  wiki/       the synthesized knowledge; interior taxonomy free per brain
+  raw/        immutable ingested source material, fenced, kept in-tree
+  log.md      build + write-back timeline
+  CHANGELOG.md
+```
+
+Zero infrastructure: no RAG, no embeddings, no database, no server. Files only.
+Retrieval is an agent starting at `index.md` and following links.
+
+The scripts below sit next to this file. Run them by their path in this skill
+directory — they are stdlib-only Python 3, no install step:
+
+| Step | Call |
+|---|---|
+| List the kinds on offer | `python3 scripts/scaffold.py --list-blueprints` |
+| Stand the brain up | `python3 scripts/scaffold.py --title "…" --domain "…" --kind subject [--slug …] [--at ~/brains]` |
+| Ingest local files | `python3 scripts/ingest_local.py <paths…> --into <brain> --json` |
+| Generate the router | `python3 scripts/gen_router.py <brain>` |
+| Lint (last — it checks the router too) | `python3 scripts/lint.py <brain>` |
+
+## Phase 1 — Intake
+
+Interview to **shared understanding, not question coverage**. Four things have
+to be understood before you can propose anything. They can come from the member,
+from the material, or from your own research — the source does not matter, only
+that you actually understand them:
+
+1. **What the brain is about.** This selects the blueprint.
+2. **What it is built from.** The kind of material, and roughly how much.
+3. **Where the sources are.** A folder path, for this arm.
+4. **What the member wants to ask it.** Keep these questions verbatim — they
+   are the calibration at the end, and the seed of `## Known gaps`.
+
+How to run it:
+
+- **A full mind-dump earns zero questions.** If the opening message covers all
+  four, acknowledge in a line and move to Gate 1. Asking anyway is the most
+  common way this skill annoys people.
+- **Research instead of asking anything look-up-able.** If a folder is named,
+  look in it — count the files, read a few, see what the material actually is.
+  Never ask "what format are your files in?" when you can list the directory.
+- **Ask about intent, never architecture.** The member is never asked how to
+  organise the wiki, how many pages there should be, what the taxonomy is, or
+  which files should become which page. Those are your job. Questions worth
+  asking are about *purpose* — what they'll ask it, what it must not get wrong.
+- **Batch what is left into one message**, two or three questions at most, in
+  plain language. This is a conversation, not a form.
+
+## Phase 2 — Shape
+
+Kinds are **blueprints, not types**, and they live as files:
+
+```bash
+python3 scripts/scaffold.py --list-blueprints
+```
+
+Read that list at runtime rather than assuming which kinds exist — adding a kind
+is adding a file, and this skill is not edited when one lands. Read the chosen
+blueprint's own file before building; it describes the shape you are aiming at.
+
+**Suggest, explain, confirm in a line.** "This is a subject brain — a wiki
+organised by concept, answering as an advisor. Sound right?" Then move on. Do not
+present a menu of kinds and ask the member to choose: they told you what they
+want in Phase 1, and picking the shape is your job.
+
+**One blueprint per brain.** Nothing merges at build time — a member who wants
+two shapes gets two brains, stacked at attach time.
+
+**Custom shapes are honoured, never advertised.** If a member explicitly asks for
+a shape no blueprint covers, build it — after one warning, once, then drop it.
+For a brain with no corpus of its own (a voice-only brain, say), the warning is
+that it has **no corpus of its own; it will lean on Claude's own knowledge and
+live research**. Never lint-enforce a custom shape, and never bring the option up
+unprompted.
+
+## Gate 1 — the source list
+
+Propose the sources, **grouped by platform, with counts and a one-line reason
+each**:
+
+```
+Local files — 34
+  ~/Documents/baking/notes/     18 md   your own bench notes, the numbers live here
+  ~/Documents/baking/refs/      12 pdf  not readable by this arm yet — see below
+  ~/Downloads/starter-log.csv    1 csv  the feeding log, 14 months of timings
+```
+
+Then: *"Anything to add or drop?"* This gate is **edited by talking** — the
+member says "drop the PDFs, add my Obsidian vault" and you redraw the list. Loop
+until they approve. Say plainly what this arm cannot read rather than quietly
+dropping it.
+
+## Gate 2 — the plan gate
+
+One message, four facts, then one approval:
+
+- **Shape** — the blueprint, in a phrase.
+- **Where it lands** — stated, never asked: "→ `~/brains/sourdough-baking/`".
+  If the member changes it in passing, take the change and carry on.
+- **Source count** — what will actually be ingested.
+- **Transcription** — hours and cost. For local files this is **none, $0**; say
+  it anyway, because it is the line that stops a surprise on the arms that do
+  transcribe.
+
+Get **one** approval and then build. No further questions during the build: if
+something needs a decision mid-build, make it and note it in the report.
+
+## Phase 3 — Build
+
+Narrate at **phase level with counts** — one line per phase, never file by file,
+never a running commentary. Five phases:
+
+**Ingest.**
+
+```bash
+python3 scripts/scaffold.py --title "<title>" --domain "<one line>" --kind <kind>
+python3 scripts/ingest_local.py <paths…> --into <brain> --json
+```
+
+`scaffold.py` writes the skeleton and — importantly — the `index.md` frontmatter
+the router generator reads. `ingest_local.py` returns counts and never raises:
+dead, empty, duplicate and unreadable files are recorded in the manifest and
+appended to `log.md`, and the build carries on. It exits non-zero only when
+**nothing** could be read; that is the single condition that stops a build, and
+it is a conversation with the member, not a crash.
+
+> `↳ Ingested 34 sources (128,400 words) — 2 empty, 1 duplicate.`
+
+**Taxonomy — one shared pass, before any page is written.** Read across the
+whole of `raw/` and decide the concept map for the brain in one pass: the pages,
+their names, what belongs on each. This happens **before** any parallel work,
+because section agents that each invent their own taxonomy produce a wiki that
+overlaps in some places and dangles in others. Fix the map first; then fill it.
+
+> `↳ Taxonomy: 11 concepts across 3 clusters.`
+
+**Pages.** Write `wiki/` from the agreed map — this is where parallel section
+agents earn their keep, one agent per cluster, each working to the shared map.
+Every page: OKF frontmatter with a `type`, the sources it was distilled from,
+the answer first, and **numbers kept exact with their context**. Never invent a
+fact to fill a page; a thin page is honest, a padded one is not.
+
+> `↳ Pages: 11 written, 38 cross-links.`
+
+**`index.md` — a first-class step, not a formality.** The one-liners are what
+routing runs on, so **each one carries the page's actual numbers**, not a topic
+label. "Hydration — 70 % baseline for 12.5 %-protein flour; wholemeal drinks 5–8 %
+more" routes; "Hydration — about hydration" does not. Leave the frontmatter
+`scaffold.py` wrote intact: `slug`, `title`, `domain`, `kind` and `stance` are
+what `gen_router.py` reads, and the router cannot be generated without them.
+
+**Router, then lint** — in that order, because the router *is* part of the
+brain: `lint.py` checks that `SKILL.md` exists and that its frontmatter can fire,
+so linting before generating it always fails on the brain's own front door.
+
+```bash
+python3 scripts/gen_router.py <brain>   # reads index.md frontmatter
+python3 scripts/lint.py <brain>         # skeleton, frontmatter, links, router
+```
+
+Regenerating the router is a no-op diff, so fix anything lint reports and run
+both again without thinking about it.
+
+> `↳ Router generated. Lint clean.`
+
+## Phase 4 — Self-check
+
+Two passes close every build:
+
+1. **Lint** — until it exits 0, regenerating the router after any fix. Dangling
+   links cluster on exactly the concepts people reach for most, so they matter
+   more than they look.
+2. **Number verification** — spot-check the figures that made it into `index.md`
+   and the most-cited pages against `raw/`. A number that cannot be traced back
+   comes out of the brain; it does not get softened into a vague claim.
+
+**Whatever is left over becomes `## Known gaps` in `index.md`, not a build
+error.** Thin areas, sources that failed, intake questions the corpus turned out
+not to answer — all of it belongs in the register the brain refuses from. A brain
+that knows what it does not know is the whole point.
+
+## Phase 5 — Finish by demo
+
+A build is not finished when the files exist. It is finished when the member has
+seen it work.
+
+1. **Attach it** with the `brain-toggle` skill — that skill owns the mechanics.
+   If it is not installed, the manual stand-in is one symlink:
+   `mkdir -p ~/.claude/skills && ln -sfn ~/brains/<slug> ~/.claude/skills/<slug>`
+2. **Demo it** with one of the member's **own** questions from Phase 1 — asked
+   verbatim, answered by the brain. Their question, their material, their
+   answer, in front of them.
+3. **Report in a few lines**: what was built, how many sources and pages, where
+   it lives, the one summary line for anything that failed, and what the Known
+   gaps say.
+
+## Rules that hold throughout
+
+- **Never ask the member to do architecture.** Taxonomy, page boundaries, file
+  layout, frontmatter — yours, every time.
+- **Fail loudly, never silently.** A source that could not be read is named in
+  the log and counted in the summary. Never quietly skip.
+- **Rights**: build only from material the member lawfully has, on their machine.
+  Never remove DRM, never work around a paywall, attribute every chunk. The
+  attribution is automatic — `raw/` pages carry their source path and ingest
+  date. Do not lecture the member about any of this mid-build.
+- **`raw/` is immutable.** Ingested material is never edited, only distilled.
+- **Built brains are never redistributed** — members rebuild from a prompt.

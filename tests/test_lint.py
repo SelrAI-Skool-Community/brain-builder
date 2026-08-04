@@ -98,11 +98,60 @@ class FrontmatterRules(BrainOnDisk):
         self.write(brain, "raw/transcript.md", "Bare transcript text, no frontmatter.\n")
         self.assertTrue(lint_brain(brain).ok)
 
-    def test_overlay_pages_are_exempt_because_they_load_whole(self):
-        """`persona/` and `standing/` are loaded whole, not routed as OKF pages."""
+    def test_an_index_that_links_into_raw_has_unfenced_it(self):
+        """Fencing is a router instruction *and* exclusion from the index (spec §2).
+
+        A `raw/` page reachable from `index.md` is one an answer will follow a
+        link to, and the link resolves — so nothing else in the lint notices.
+        """
+        brain = self.minimal_brain()
+        self.write(brain, "index.md", page(
+            "# Test Brain\n\n- [Concept](wiki/concept.md) — 3 of them.\n"
+            "- [Transcript](raw/source.md) — the source.\n"
+            "\n## Known gaps\n\n- Everything else.\n",
+            type="index", slug="test-brain", title="Test Brain",
+            domain="A brain.", kind="subject", stance="advisor"))
+
+        report = lint_brain(brain)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(any("fenced" in error for error in report.errors), report.errors)
+
+    def test_a_wiki_page_may_still_link_raw_for_a_verbatim_quote(self):
+        """Only the index is fenced against `raw/` — a page citing a quote is fine."""
+        brain = self.minimal_brain()
+        self.write(brain, "wiki/concept.md", page(
+            "# Concept\n\nQuoted from [the transcript](../raw/source.md).\n",
+            type="concept", title="Concept"))
+        self.assertTrue(lint_brain(brain).ok, lint_brain(brain).errors)
+
+    def test_persona_pages_are_exempt_because_they_load_whole_and_are_never_cited(self):
+        brain = self.minimal_brain()
+        self.write(brain, "persona/voice.md", "# Voice\n\nNo frontmatter.\n")
+        self.write(brain, "persona/exemplars.md", "# Exemplars\n\nNone either.\n")
+        self.assertTrue(lint_brain(brain).ok, lint_brain(brain).errors)
+
+    def test_standing_pages_are_held_to_the_page_rules_because_they_are_routed(self):
+        """The two overlays have different contracts (spec §4).
+
+        `standing/` is **unfenced**: routed like `wiki/`, linked from `index.md`,
+        and cited as `standing/<page>.md` in a Sources block. A page an answer
+        can cite is a page the frontmatter rules bind — exempting it was the
+        two overlays being treated as one.
+        """
         brain = self.minimal_brain()
         self.write(brain, "standing/policy.md", "# Policy\n\nNo frontmatter.\n")
-        self.write(brain, "persona/voice.md", "# Voice\n\nNo frontmatter either.\n")
+
+        report = lint_brain(brain)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(any("standing/policy.md" in error for error in report.errors),
+                        report.errors)
+
+    def test_a_standing_page_with_okf_frontmatter_passes(self):
+        brain = self.minimal_brain()
+        self.write(brain, "standing/policy.md",
+                   page("# Policy\n\nThe policy.\n", type="policy", title="Policy"))
         self.assertTrue(lint_brain(brain).ok, lint_brain(brain).errors)
 
     def test_overlay_pages_are_still_link_checked(self):

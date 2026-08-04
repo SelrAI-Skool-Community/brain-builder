@@ -46,11 +46,19 @@ import tempfile
 
 import captions as caption_text
 import cli
+import rights
 import transcribe
 from raw_store import Manifest, RawStore, Record, log_manifest, report
 from scaffold import log_event
 
 SOURCE_FORMAT = "youtube"
+
+#: The only hosts this arm fetches. yt-dlp ships extractors for TikTok,
+#: Instagram, Vimeo, X and Facebook, so without this guard the deferred list
+#: (spec.md §6) would be enforced by nothing but the model's good manners — and
+#: a Spotify URL would reach the generic extractor, which is a rights failure
+#: rather than a scope one. A bare search term has no host and is always fine.
+YOUTUBE_HOSTS = ("youtube.com", "youtu.be", "youtube-nocookie.com")
 
 #: Where the arm remembers what it already pulled. Dot-prefixed and outside the
 #: contract's folders, so lint walks past it and `raw/` stays pure material.
@@ -175,6 +183,10 @@ def estimate(targets, limit=None, engine=transcribe.DEFAULT_ENGINE, downloader=N
     downloader = downloader or YtDlp()
     durations, unpriced = [], []
     for target in targets:
+        refusal = target_refusal(target)
+        if refusal:                         # never fetched, so never priced
+            unpriced.append("{} ({})".format(target, refusal))
+            continue
         try:
             videos = downloader.videos(target, limit=limit)
         except Exception as failure:
@@ -185,7 +197,32 @@ def estimate(targets, limit=None, engine=transcribe.DEFAULT_ENGINE, downloader=N
                             unpriced=unpriced, ceiling=True)
 
 
+def target_refusal(target):
+    """Why this arm will not fetch `target`, or `None`.
+
+    Two different refusals, deliberately worded differently: a DRM'd host is the
+    rights stance (docs/rights.md) and never has a way in, while another video
+    platform is simply not in v1 and might be later. Both are named, neither is
+    worked around, and a bare search term is neither.
+    """
+    if "://" not in (target or ""):
+        return None
+    drm = rights.refusal_for_url(target)
+    if drm:
+        return drm
+    host = rights.host_of(target)
+    if any(host == allowed or host.endswith("." + allowed) for allowed in YOUTUBE_HOSTS):
+        return None
+    return ("{} is not a v1 source — this arm reads YouTube. Instagram, TikTok, "
+            "Vimeo, X, Facebook and LinkedIn are deferred; an export, a download "
+            "or the show's RSS feed is the way in today.".format(host or target))
+
+
 def _ingest_target(target, run, limit):
+    refusal = target_refusal(target)
+    if refusal:                             # refused before a single request goes out
+        return run.manifest.add(Record(target, "unsupported",
+                                       source_format=SOURCE_FORMAT, reason=refusal))
     try:
         videos = run.downloader.videos(target, limit=limit)
     except ImportError as failure:

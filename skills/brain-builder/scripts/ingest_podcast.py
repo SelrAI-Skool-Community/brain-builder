@@ -133,6 +133,12 @@ def ingest(targets, brain, limit=None, transcribe_missing=False,
         feed = _load_feed(target, fetcher, run.manifest)
         if feed is None:
             continue
+        if not feed.episodes:               # a resolved feed with nothing in it
+            run.manifest.add(Record(
+                target, "failed", source_format=SOURCE_FORMAT,
+                reason="the feed resolved but lists no episodes — check the show, "
+                       "or the feed may have been emptied by its host"))
+            continue
         for episode in (feed.episodes[:limit] if limit else feed.episodes):
             _ingest_episode(episode, feed, run)
 
@@ -252,20 +258,21 @@ def _load_feed(target, fetcher, manifest):
 
 
 def _ingest_episode(episode, feed, run):
-    text = _published_transcript(episode, run.fetcher)
+    text, note = _published_transcript(episode, run.fetcher, run.store)
     provenance = {"transcript": "publisher"}
 
     if not text and not episode.enclosure_url:
         return run.record(episode, "failed",
-                          "no audio and no transcript in the feed — this reads as a "
-                          "platform exclusive, and there is no other way in")
+                          "no audio and {} — this reads as a platform exclusive, "
+                          "and there is no other way in"
+                          .format(note or "no transcript in the feed"))
 
     if not text:
         if not run.transcribe_missing:
             return run.record(episode, "empty",
-                              "no published transcript — re-run this arm with "
-                              "--transcribe to send the audio to the transcription "
-                              "engine instead")
+                              "{} — re-run this arm with --transcribe to send the "
+                              "audio to the transcription engine instead"
+                              .format(note or "no published transcript"))
         text, failure = _transcribe(episode, run)
         if failure:
             return run.record(episode, "failed", failure)
@@ -285,26 +292,40 @@ def _ingest_episode(episode, feed, run):
                           show=feed.title, **provenance)
 
 
-def _published_transcript(episode, fetcher):
-    """The publisher's own transcript, if there is one and it can be read.
+def _published_transcript(episode, fetcher, store=None):
+    """The publisher's own transcript, as `(text, note)`.
 
     A transcript URL that 404s is not a failure — it is a reason to fall through
     to the next step in the ordering, which is exactly what the ordering is for.
-    The feed's declared type wins; the server's `Content-Type` is the fallback,
-    because feeds declare `application/octet-stream` at a real rate.
+    But the fall-through must not erase what happened: "no published transcript"
+    for an episode that published one and served a 404 loses the only fact worth
+    acting on, so `note` carries it into the record. The feed's declared type
+    wins; the server's `Content-Type` is the fallback, because feeds declare
+    `application/octet-stream` at a real rate.
+
+    A transcript page behind a wall is quarantined here rather than ingested —
+    the web arm is not the only place a paywall reaches the kit (docs/rights.md).
     """
     chosen = pick_transcript(episode.transcripts)
     if not chosen:
-        return ""
+        return "", ""
     url, mime = chosen
     try:
         response = fetcher(url)
-    except FetchError:
-        return ""
+    except FetchError as failure:
+        return "", "the published transcript could not be fetched ({})".format(failure)
     fmt = caption_text.known_format(mime, url) or caption_text.format_for(
         response.content_type, url)
     text = caption_text.clean(response.text, fmt)
-    return "" if caption_text.is_empty(text) else text
+    if caption_text.is_empty(text):
+        return "", "the published transcript came back almost empty"
+
+    walled = rights.paywall_reason(text)
+    if walled:
+        parked = store.quarantine(text, episode.title or url, url, walled) if store else ""
+        return "", "the published transcript is {}{}".format(
+            walled, " — kept at {}".format(parked) if parked else "")
+    return text, ""
 
 
 def _transcribe(episode, run):

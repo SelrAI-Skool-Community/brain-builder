@@ -41,29 +41,40 @@ does work: an export, a download, or the show's RSS feed.
   raw/        immutable ingested source material, fenced, kept in-tree
   log.md      build + write-back timeline
   CHANGELOG.md
+  persona/    overlay, when the blueprint declares one: voice.md + exemplars.md
+  standing/   overlay, when the blueprint declares one: standing facts and policies
 ```
 
 Zero infrastructure: no RAG, no embeddings, no database, no server. Files only.
 Retrieval is an agent starting at `index.md` and following links.
 
-The scripts below sit next to this file. Run them by their path in this skill
-directory — stdlib-only Python 3 except the ingestion readers, which each import
-their own library and name the `pip install` line if it is missing:
+The scripts sit next to this file, and `scripts/…` below means **this skill
+directory** — not the member's working directory, which is where you are
+actually running. Resolve it once at the start of a build and use the absolute
+path from then on:
+
+```bash
+KIT=~/.claude/skills/brain-builder/scripts   # or wherever this skill was installed
+python3 "$KIT/scaffold.py" --list-blueprints
+```
+
+Stdlib-only Python 3 except the ingestion readers, which each import their own
+library and name the `pip install` line if it is missing:
 
 | Step | Call |
 |---|---|
-| List the kinds on offer | `python3 scripts/scaffold.py --list-blueprints` |
-| Stand the brain up | `python3 scripts/scaffold.py --title "…" --domain "…" --kind subject [--slug …] [--at ~/brains]` |
-| Ingest local files | `python3 scripts/ingest_local.py <paths…> --into <brain> --json` |
-| Ingest PDFs / EPUBs | `python3 scripts/ingest_docs.py <paths…> --into <brain> --json` |
-| Ingest YouTube | `python3 scripts/ingest_youtube.py <url-or-search…> --into <brain> [--limit N] [--transcribe] --json` |
-| Ingest web articles | `python3 scripts/ingest_web.py <urls…> --into <brain> --json` |
-| Ingest podcasts | `python3 scripts/ingest_podcast.py <apple-url\|rss-url\|"show name"…> --into <brain> [--limit N] [--transcribe] --json` |
-| Price transcription (Gate 2) | `python3 scripts/ingest_podcast.py --estimate <show…>` · `python3 scripts/ingest_youtube.py --estimate <url…>` · `python3 scripts/transcribe.py --estimate <seconds…>` |
-| Find sources that repeat each other | `python3 scripts/dedup_corpus.py <brain> --json` |
-| Check the figures | `python3 scripts/verify_numbers.py <brain>` |
-| Generate the router | `python3 scripts/gen_router.py <brain>` |
-| Lint (last — it checks the router too) | `python3 scripts/lint.py <brain>` |
+| List the kinds on offer | `python3 "$KIT/scaffold.py" --list-blueprints` |
+| Stand the brain up | `python3 "$KIT/scaffold.py" --title "…" --domain "…" --kind subject [--slug …] [--at ~/brains]` |
+| Ingest local files | `python3 "$KIT/ingest_local.py" <paths…> --into <brain> --json` |
+| Ingest PDFs / EPUBs | `python3 "$KIT/ingest_docs.py" <paths…> --into <brain> --json` |
+| Ingest YouTube | `python3 "$KIT/ingest_youtube.py" <url-or-search…> --into <brain> [--limit N] [--transcribe] --json` |
+| Ingest web articles | `python3 "$KIT/ingest_web.py" <urls…> --into <brain> --json` |
+| Ingest podcasts | `python3 "$KIT/ingest_podcast.py" <apple-url\|rss-url\|"show name"…> --into <brain> [--limit N] [--transcribe] --json` |
+| Price transcription (Gate 2) | `python3 "$KIT/ingest_podcast.py" --estimate <show…>` · `python3 "$KIT/ingest_youtube.py" --estimate <url…>` · `python3 "$KIT/transcribe.py" --estimate <seconds…>` |
+| Find sources that repeat each other | `python3 "$KIT/dedup_corpus.py" <brain> --json` |
+| Check the figures | `python3 "$KIT/verify_numbers.py" <brain>` |
+| Generate the router | `python3 "$KIT/gen_router.py" <brain>` |
+| Lint (last — it checks the router too) | `python3 "$KIT/lint.py" <brain>` |
 
 ## Phase 1 — Intake
 
@@ -74,7 +85,8 @@ that you actually understand them:
 
 1. **What the brain is about.** This selects the blueprint.
 2. **What it is built from.** The kind of material, and roughly how much.
-3. **Where the sources are.** A folder path, for this arm.
+3. **Where the sources are.** A folder path, a channel, a feed, a reading list —
+   whatever the arms get pointed at, per source family.
 4. **What the member wants to ask it.** Keep these questions verbatim — they
    are the calibration at the end, and the seed of `## Known gaps`.
 
@@ -98,7 +110,7 @@ How to run it:
 Kinds are **blueprints, not types**, and they live as files:
 
 ```bash
-python3 scripts/scaffold.py --list-blueprints
+python3 "$KIT/scaffold.py" --list-blueprints
 ```
 
 Read that list at runtime rather than assuming which kinds exist — adding a kind
@@ -130,7 +142,17 @@ Local files — 34
   ~/Documents/baking/notes/     18 md   your own bench notes, the numbers live here
   ~/Documents/baking/refs/      12 pdf  the reference books, read by the docs arm
   ~/Downloads/starter-log.csv    1 csv  the feeding log, 14 months of timings
+
+YouTube — 30
+  @thebreadchannel               24     the technique series, where the timings are
+  the six "starter troubleshooting" videos  6  the questions you said you ask most
+
+Podcasts — 12
+  Proof (Apple Podcasts)         12     the miller interviews, for the flour numbers
 ```
+
+One group per platform, because that is how the member edits it — "drop the
+PDFs" and "cut the podcast to six" are the two things they say.
 
 Then: *"Anything to add or drop?"* This gate is **edited by talking** — the
 member says "drop the PDFs, add my Obsidian vault" and you redraw the list. Loop
@@ -151,9 +173,9 @@ One message, four facts, then one approval:
   gate:
 
   ```bash
-  python3 scripts/ingest_podcast.py --estimate <show…>   # prices the feed
-  python3 scripts/ingest_youtube.py --estimate <url…>    # the ceiling for video
-  python3 scripts/transcribe.py --estimate <seconds…>    # prices anything else
+  python3 "$KIT/ingest_podcast.py" --estimate <show…>   # prices the feed
+  python3 "$KIT/ingest_youtube.py" --estimate <url…>    # the ceiling for video
+  python3 "$KIT/transcribe.py" --estimate <seconds…>    # prices anything else
   ```
 
   For local files, documents and web articles this is **none, $0** — say it
@@ -172,18 +194,20 @@ it; without it they record a caption-less source rather than spending money.
 ## Phase 3 — Build
 
 Narrate at **phase level with counts** — one line per phase, never file by file,
-never a running commentary. Five phases:
+never a running commentary. Five phases: ingest → taxonomy → pages → router →
+lint. The last two share one line; overlays add a sixth line on the kinds that
+have them.
 
 **Ingest — one arm per source family, then one dedup pass.**
 
 ```bash
-python3 scripts/scaffold.py --title "<title>" --domain "<one line>" --kind <kind>
-python3 scripts/ingest_local.py <paths…>   --into <brain> --json   # md/txt/csv/json/docx
-python3 scripts/ingest_docs.py <paths…>    --into <brain> --json   # pdf/epub
-python3 scripts/ingest_youtube.py <urls…>  --into <brain> --json   # channels, playlists, searches
-python3 scripts/ingest_web.py <urls…>      --into <brain> --json   # articles
-python3 scripts/ingest_podcast.py <shows…> --into <brain> --json   # Apple Podcasts or any RSS
-python3 scripts/dedup_corpus.py <brain> --json                     # after every arm has run
+python3 "$KIT/scaffold.py" --title "<title>" --domain "<one line>" --kind <kind>
+python3 "$KIT/ingest_local.py" <paths…>   --into <brain> --json   # md/txt/csv/json/docx
+python3 "$KIT/ingest_docs.py" <paths…>    --into <brain> --json   # pdf/epub
+python3 "$KIT/ingest_youtube.py" <urls…>  --into <brain> --json   # channels, playlists, searches
+python3 "$KIT/ingest_web.py" <urls…>      --into <brain> --json   # articles
+python3 "$KIT/ingest_podcast.py" <shows…> --into <brain> --json   # Apple Podcasts or any RSS
+python3 "$KIT/dedup_corpus.py" <brain> --json                     # after every arm has run
 ```
 
 `scaffold.py` writes the skeleton and — importantly — the `index.md` frontmatter
@@ -233,6 +257,23 @@ thin page is honest, a padded one is not.
 
 > `↳ Pages: 11 written, 38 cross-links.`
 
+**Overlays — where the blueprint declares one.** A subject brain has none and
+this step is skipped. The other two are not optional extras: a persona brain
+without its overlay is a subject brain wearing the name of a person.
+
+- **`persona/`** — `voice.md` and `exemplars.md`, **both required**. `voice.md`
+  is a thin list of *observable* rules, each one pointable-at in the corpus;
+  `exemplars.md` is **10–20 verbatim excerpts chosen for range**, short-form
+  register included, because the exemplars do the heavy lifting and a rule that
+  cannot be pointed at is a guess. The overlay is loaded whole, never merged
+  with facts, and **never cited** — so it is not linked from `index.md`.
+- **`standing/`** — standing facts and policies, one page each. It is
+  **unfenced**: routed exactly like `wiki/`, so its pages carry OKF frontmatter
+  (lint holds them to it) and **are linked from `index.md`** like any other
+  routed page.
+
+> `↳ Overlay: voice.md + 14 exemplars.`
+
 **`index.md` — a first-class step, not a formality.** The one-liners are what
 routing runs on, so **each one carries the page's actual numbers**, not a topic
 label. "Hydration — 70 % baseline for 12.5 %-protein flour; wholemeal drinks 5–8 %
@@ -240,15 +281,14 @@ more" routes; "Hydration — about hydration" does not. Leave the frontmatter
 `scaffold.py` wrote intact: `slug`, `title`, `domain`, `kind` and `stance` are
 what `gen_router.py` reads, and the router cannot be generated without them.
 
-**Router, then lint.** The spec lists the phases as `… → lint → router`
-(spec.md §5); in practice they run the other way round, because the router *is*
-part of the brain — `lint.py` checks that `SKILL.md` exists and that its
-frontmatter can fire, so linting first always fails on the brain's own front
-door. Lint still closes the build, which is what that ordering was protecting.
+**Router, then lint** — in that order, and lint closes the build (spec.md §5, as
+amended: the router *is* part of the brain, and `lint.py` checks that `SKILL.md`
+exists and that its frontmatter can fire, so linting first always fails on the
+brain's own front door).
 
 ```bash
-python3 scripts/gen_router.py <brain>   # reads index.md frontmatter
-python3 scripts/lint.py <brain>         # skeleton, frontmatter, links, router
+python3 "$KIT/gen_router.py" <brain>   # reads index.md frontmatter
+python3 "$KIT/lint.py" <brain>         # skeleton, frontmatter, links, router
 ```
 
 Regenerating the router is a no-op diff, so fix anything lint reports and run
@@ -263,7 +303,7 @@ Two passes close every build:
 1. **Lint** — until it exits 0, regenerating the router after any fix. Dangling
    links cluster on exactly the concepts people reach for most, so they matter
    more than they look.
-2. **Number verification** — `python3 scripts/verify_numbers.py <brain>`, which
+2. **Number verification** — `python3 "$KIT/verify_numbers.py" <brain>`, which
    catches figures their own sentence contradicts, spoken numbers the digits
    disagree with, and figures that lost their unit. Errors exit 1; fix them
    against `raw/` before the brain ships. Then spot-check by hand what a script

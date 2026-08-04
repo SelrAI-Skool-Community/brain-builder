@@ -203,9 +203,42 @@ class FailuresNeverHalt(IngestOnDisk):
         self.source("book.epub", "not readable here\n")
         self.assertTrue(ingest([self.sources], self.brain).whole_corpus_failed)
 
-    def test_an_empty_folder_is_not_a_failed_corpus(self):
-        """Nothing was ever found — that is a conversation, not a crash."""
-        self.assertFalse(ingest([self.sources], self.brain).whole_corpus_failed)
+    def test_an_empty_folder_is_a_named_record_and_stops_the_build(self):
+        """A folder that yielded nothing is the same miss as a folder of PDFs.
+
+        It used to come back as an empty manifest and exit 0, which is the
+        silent skip spec.md §6 forbids: the member approved that path at Gate 1,
+        and "0 sources ingested" with no record naming the folder is the build
+        agreeing that nothing was ever asked for.
+        """
+        manifest = ingest([self.sources], self.brain)
+
+        self.assertEqual(1, len(manifest.failed))
+        self.assertEqual(self.sources, manifest.failed[0].source)
+        self.assertIn("no files", manifest.failed[0].reason)
+        self.assertTrue(manifest.whole_corpus_failed)
+
+    def test_a_path_that_does_not_exist_is_named_never_dropped(self):
+        """A mistyped or moved path is the commonest Gate 1 miss there is."""
+        missing = os.path.join(self.sources, "not-here")
+        self.source("notes.md", "Material.\n")
+
+        manifest = ingest([missing, self.sources], self.brain)
+
+        self.assertEqual(1, len(manifest.failed))
+        self.assertIn("no such file or folder", manifest.failed[0].reason)
+        self.assertEqual(1, len(manifest.ok), "the rest of the corpus still lands")
+        self.assertFalse(manifest.whole_corpus_failed)
+
+    def test_a_drm_file_is_refused_by_name_not_called_unreadable(self):
+        """`ingest_docs` refuses these; which arm a folder was routed to must not
+        decide whether the member is told it is DRM (docs/rights.md)."""
+        self.source("book.azw3", "irrelevant\n")
+
+        record = ingest([self.sources], self.brain).failed[0]
+
+        self.assertIn("Kindle DRM", record.reason)
+        self.assertIn("DRM-free", record.reason)
 
     def test_failures_are_written_to_the_brains_log(self):
         self.source("blank.txt", "\n")

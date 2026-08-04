@@ -56,6 +56,22 @@ class DRM(BrainOnDisk):
         self.assertTrue(reason)
         self.assertIn("rss", reason.lower())
 
+    def test_the_refusal_covers_the_domain_not_one_spelling_of_the_host(self):
+        """`www.audible.com` refused and `audible.co.uk` waved through is no stance."""
+        for url in ("https://audible.com/pd/x",
+                    "https://www.audible.co.uk/pd/x",
+                    "https://www.audible.com.au/pd/x",
+                    "https://podcasters.spotify.com/pod/show/x",
+                    "https://spotify.link/abc",
+                    "https://read.amazon.com/kindle-library"):
+            with self.subTest(url=url):
+                self.assertTrue(rights.refusal_for_url(url), url)
+
+    def test_a_host_that_merely_ends_in_the_same_letters_is_not_refused(self):
+        """Suffix matching is on label boundaries, not string endings."""
+        self.assertIsNone(rights.refusal_for_url("https://notspotify.com/x"))
+        self.assertIsNone(rights.refusal_for_url("https://myaudible.com/x"))
+
     def test_an_ordinary_feed_or_article_url_is_not_refused(self):
         for url in ("https://feeds.example.com/show.xml",
                     "https://example.com/articles/hydration",

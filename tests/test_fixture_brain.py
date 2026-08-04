@@ -14,6 +14,7 @@ from brainkit import FIXTURES_DIR, BrainOnDisk
 from brain_contract import parse_frontmatter, read_page
 from gen_router import read_brain_meta, write_router
 from lint import lint_brain
+from verify_numbers import verify_brain
 
 FIXTURE = os.path.join(FIXTURES_DIR, "sourdough-baking")
 
@@ -24,6 +25,17 @@ class FixtureBrain(BrainOnDisk):
         report = lint_brain(FIXTURE)
         self.assertEqual([], report.errors)
         self.assertEqual([], report.warnings)
+
+    def test_the_fixture_passes_number_verification_clean(self):
+        """The self-check that closes every build (spec §5) has nothing to say.
+
+        A reference brain that ships with warnings teaches the warnings are
+        noise. Every wiki page here carries `sources:`, which is what chains its
+        figures back to `raw/` — the per-chunk attribution of §6, demonstrated
+        rather than only checked for.
+        """
+        report = verify_brain(FIXTURE)
+        self.assertEqual([], [finding.line() for finding in report.findings])
 
     def test_the_fixture_is_a_subject_brain_in_advisor_stance(self):
         meta = read_brain_meta(FIXTURE)

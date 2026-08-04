@@ -27,6 +27,10 @@ OPTIONAL_FILES = ("log.md", "CHANGELOG.md")
 OPTIONAL_DIRS = ("raw",)
 OVERLAY_DIRS = ("persona", "standing")
 
+#: `persona/` is loaded whole and never cited; `standing/` is unfenced and
+#: routed like `wiki/`. Named so the difference is stated once (spec.md §4).
+PERSONA_OVERLAY, STANDING_OVERLAY = OVERLAY_DIRS
+
 #: The kind a brain is when nothing says otherwise.
 DEFAULT_KIND = "subject"
 
@@ -62,9 +66,27 @@ class Page(object):
         return self.frontmatter.get("type")
 
     @property
+    def overlay(self):
+        """The overlay this page sits in, or `""` for `wiki/` and the root."""
+        folder = self.relpath.split("/")[0]
+        return folder if folder in OVERLAY_DIRS else ""
+
+    @property
     def in_overlay(self):
-        """Overlay pages are loaded whole, so OKF page rules do not bind them."""
-        return self.relpath.split("/")[0] in OVERLAY_DIRS
+        return bool(self.overlay)
+
+    @property
+    def is_routed(self):
+        """Whether an answer can reach this page by following links.
+
+        The two overlays have different contracts (spec.md §4) and collapsing
+        them is how `standing/` ends up cited in a Sources block without ever
+        being held to the frontmatter rules. `persona/` is loaded whole and
+        never cited; `standing/` is **unfenced** — routed exactly like `wiki/`,
+        linked from `index.md` — so it is a routed page and the page rules bind
+        it.
+        """
+        return self.overlay != PERSONA_OVERLAY
 
     def links(self):
         """Relative link targets in the body, code blocks excluded."""

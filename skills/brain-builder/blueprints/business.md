@@ -93,7 +93,9 @@ carry freshness fields and they are filled in, not decorated:
 
 Every `fast` page needs an `as_of`, because the router answers fast facts with
 their date attached in the same breath — the number stays exact and the date is
-the honesty. A `fast` page without a date makes that impossible, and lint says so.
+the honesty. A `fast` page without a date makes that impossible, and lint warns
+about it — a warning, not an error, so it is on the build to fix it rather than
+on the exit code to force it.
 
 ## Source-authority ranking — the kind's first job, at build time
 

@@ -57,6 +57,27 @@ class CostEstimate(unittest.TestCase):
         self.assertLess(estimate.cost, 0.22)
         self.assertIn("never quote", estimate.line().lower())
 
+    def test_items_with_no_duration_are_counted_not_quietly_priced_at_zero(self):
+        """Gate 2 is the one place cost is stated (spec §6), so it cannot round down.
+
+        A feed that ships enclosures and no `<itunes:duration>` used to come back
+        as "none, $0" for a corpus that was about to be billed in full.
+        """
+        estimate = transcribe.estimate([None, None, None])
+
+        self.assertEqual(3, estimate.items)
+        self.assertEqual(3, estimate.untimed)
+        self.assertNotIn("none, $0", estimate.line())
+        self.assertIn("states a duration", estimate.line())
+        self.assertIn("3 sources", estimate.line())
+
+    def test_a_partly_timed_corpus_says_how_much_the_figure_is_missing(self):
+        estimate = transcribe.estimate([3600, None])
+
+        self.assertEqual(1, estimate.untimed)
+        self.assertIn("1 source states no duration", estimate.line())
+        self.assertIn("$0.22", estimate.line())
+
     def test_an_unknown_engine_is_refused_rather_than_guessed(self):
         with self.assertRaises(ValueError):
             transcribe.estimate([3600], engine="whisper")

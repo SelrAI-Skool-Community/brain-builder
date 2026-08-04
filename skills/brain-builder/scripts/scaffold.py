@@ -137,15 +137,24 @@ def blueprint_stance(kind, directory=BLUEPRINTS_DIR):
     return default_stance(kind)
 
 
-def log_event(root, message):
+def log_event(root, message, once=False):
     """Append one line to the brain's `log.md`.
 
     Ingest failures land here rather than stopping the build: a dead source is
     a line in the log, not the end of the run.
+
+    `once=True` skips a line the log already carries verbatim. The self-check
+    passes are re-run until they come back clean (spec.md §5), and a timeline
+    that gains an identical line each time is a timeline nobody reads.
     """
     path = os.path.join(os.path.abspath(os.path.expanduser(root)), "log.md")
+    line = "- {} — {}\n".format(_today(), message)
+    if once and os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as handle:
+            if line in handle.read():
+                return path
     with open(path, "a", encoding="utf-8") as handle:
-        handle.write("- {} — {}\n".format(_today(), message))
+        handle.write(line)
     return path
 
 

@@ -7,9 +7,15 @@ Handles md/txt/csv/json/docx. Every ingested file becomes one attributed page
 under `raw/`: the source path and the ingest date ride with the text, because
 the rights stance is that every chunk in a brain says where it came from.
 
-Failure is a record, not an exception. A file that cannot be read, or that holds
-no text at all, is counted and logged to the brain's `log.md`, and the run
-carries on — one dead file has never been a reason to abandon a corpus. The one
+DRM is refused before anything opens the file, by the same `rights.py` call the
+documents arm makes: a folder of downloads is the likeliest place a Kindle or
+Audible file turns up, and "no reader for this file type" is the wrong answer to
+one. The member gets the refusal and what would work instead (docs/rights.md).
+
+Failure is a record, not an exception. A file that cannot be read, that holds no
+text at all, or a path with nothing at it, is counted and logged to the brain's
+`log.md`, and the run carries on — one dead file has never been a reason to
+abandon a corpus. The one
 exception is a corpus that yielded *nothing*, which exits non-zero so the build
 stops rather than producing an empty brain. A folder of file types this arm
 cannot read counts as exactly that: pointing the builder at a folder of PDFs is
@@ -35,8 +41,9 @@ import zipfile
 import xml.etree.ElementTree as ElementTree
 
 import cli
-from raw_store import (Manifest, RawStore, Record, log_manifest, report,
-                       walk_sources)
+import rights
+from raw_store import (Manifest, RawStore, Record, log_manifest, missing_reason,
+                       report, walk_sources)
 
 TEXT_FORMATS = {".md": "md", ".markdown": "md", ".txt": "txt", ".text": "txt"}
 SUPPORTED = dict(TEXT_FORMATS, **{".csv": "csv", ".json": "json", ".docx": "docx"})
@@ -62,6 +69,13 @@ def ingest(sources, brain):
 
 
 def _ingest_one(path, relpath, store, manifest):
+    if relpath is None:                     # nothing at that path — never dropped
+        return manifest.add(Record(path, "failed", reason=missing_reason(path)))
+
+    refusal = rights.refusal_for_file(path)
+    if refusal:                             # refused before anything opens it
+        return manifest.add(Record(path, "failed", reason=refusal))
+
     source_format = SUPPORTED.get(os.path.splitext(path)[1].lower())
     if source_format is None:
         return manifest.add(Record(path, "unsupported", reason="no reader for this file type"))

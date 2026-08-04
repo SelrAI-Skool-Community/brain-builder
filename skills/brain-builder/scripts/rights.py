@@ -33,19 +33,27 @@ DRM_EXTENSIONS = {
     ".acsm": "Adobe DRM", ".ibooks": "Apple Books DRM",
 }
 
-#: Hosts whose whole model is a DRM'd player. Never fetched; an alternative is
-#: named instead, because for podcasts there almost always is one.
+#: Domains whose whole model is a DRM'd player or library. Never fetched; an
+#: alternative is named instead, because for podcasts there almost always is
+#: one. Keys are domains — `refusal_for_url` matches them and any subdomain, so
+#: the country variants and the mobile hosts are covered without listing them.
 DRM_HOSTS = {
-    "open.spotify.com": "Spotify's player is DRM-protected and the kit does not "
-                        "touch it — point me at the show's RSS feed or its Apple "
-                        "Podcasts link instead. A Spotify-exclusive show has no "
-                        "feed, and that is a dead end rather than a workaround.",
-    "play.spotify.com": "Spotify's player is DRM-protected and the kit does not "
-                        "touch it — the show's RSS feed or Apple Podcasts link works.",
-    "www.audible.com": "Audible files are DRM-protected and the kit does not touch "
-                       "them. A podcast RSS feed or a purchased DRM-free file works.",
-    "www.kindle.com": "Kindle files are DRM-protected and the kit does not touch "
-                      "them. A DRM-free EPUB or PDF of the same book works.",
+    "spotify.com": "Spotify's player is DRM-protected and the kit does not "
+                   "touch it — point me at the show's RSS feed or its Apple "
+                   "Podcasts link instead. A Spotify-exclusive show has no "
+                   "feed, and that is a dead end rather than a workaround.",
+    "spotify.link": "Spotify's player is DRM-protected and the kit does not "
+                    "touch it — the show's RSS feed or Apple Podcasts link works.",
+    "audible.com": "Audible files are DRM-protected and the kit does not touch "
+                   "them. A podcast RSS feed or a purchased DRM-free file works.",
+    "audible.co.uk": "Audible files are DRM-protected and the kit does not touch "
+                     "them. A podcast RSS feed or a purchased DRM-free file works.",
+    "audible.com.au": "Audible files are DRM-protected and the kit does not touch "
+                      "them. A podcast RSS feed or a purchased DRM-free file works.",
+    "kindle.com": "Kindle files are DRM-protected and the kit does not touch "
+                  "them. A DRM-free EPUB or PDF of the same book works.",
+    "read.amazon.com": "Kindle's web reader is DRM-protected and the kit does not "
+                       "touch it. A DRM-free EPUB or PDF of the same book works.",
 }
 
 #: Wall language explicit enough to condemn an extraction whatever its length.
@@ -92,11 +100,24 @@ def refusal_for_file(path):
     return None
 
 
-def refusal_for_url(url):
-    """Why this URL is refused, or `None` if the kit may fetch it."""
+def host_of(url):
+    """The lowercase hostname of `url`, port stripped, or `""`."""
     match = _HOST.match(url or "")
-    host = (match.group(1) if match else "").lower().split(":")[0]
-    return DRM_HOSTS.get(host)
+    return (match.group(1) if match else "").lower().split(":")[0]
+
+
+def refusal_for_url(url):
+    """Why this URL is refused, or `None` if the kit may fetch it.
+
+    Matched on the domain and any subdomain of it, not the exact host string: a
+    stance that refuses `www.audible.com` and waves `audible.co.uk` through is a
+    typo away from being no stance at all.
+    """
+    host = host_of(url)
+    for domain, reason in DRM_HOSTS.items():
+        if host == domain or host.endswith("." + domain):
+            return reason
+    return None
 
 
 def paywall_reason(text):

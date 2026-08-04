@@ -10,13 +10,16 @@ harnesses on this machine. An attached brain costs roughly its router's
 `description` in idle context; the body only loads when the router fires.
 
 Brains live anywhere; the default is `~/brains/<slug>/`. Every operation below
-runs through one script:
+runs through one script, `scripts/toggle.py`, which **sits next to this file**.
+
+`scripts/…` below means *this skill directory*, not the member's working
+directory — you are running inside their project, not inside the kit. Resolve it
+once at the start and use the absolute path from then on:
 
 ```bash
-python3 skills/brain-toggle/scripts/toggle.py <command> [options]
+TOGGLE=~/.claude/skills/brain-toggle/scripts/toggle.py   # or wherever this skill was installed
+python3 "$TOGGLE"                                        # no arguments: the full option list
 ```
-
-Run it with no arguments for the full option list.
 
 ## The two arms
 
@@ -25,7 +28,11 @@ Run it with no arguments for the full option list.
 | Skills directory — Claude Code, Claude Agent SDK, Codex, any SKILL.md-standard harness | symlink the brain folder in | global + project |
 | Instruction file — OpenClaw, Gemini | a delimited pointer block | global only in v1 |
 
-Neither needs a restart.
+Neither needs a restart. `--harness claude-code` (the default) and
+`--harness codex` are the two named ones; the Claude Agent SDK reads the same
+directories as Claude Code, so it is `claude-code` too. **Any other
+SKILL.md-standard harness: pass `--skills-dir <its skills directory>`** and the
+same attach/detach/list commands work unchanged.
 
 ## Attaching
 
@@ -33,7 +40,7 @@ Neither needs a restart.
 and say nothing about scope.
 
 ```bash
-python3 .../toggle.py attach ~/brains/hormozi
+python3 "$TOGGLE" attach ~/brains/hormozi
 ```
 
 The script prints the directory it is targeting, then what it linked. Report
@@ -44,7 +51,7 @@ router records a root the brain no longer sits at, and the fix is the
 **Project-scoped is opt-in**, for "only in this project" / "just for this repo":
 
 ```bash
-python3 .../toggle.py attach ~/brains/acme-business --scope project --cwd .
+python3 "$TOGGLE" attach ~/brains/acme-business --scope project --cwd .
 ```
 
 The target resolves to the **git root** when inside a repo, else the current
@@ -71,8 +78,8 @@ since no single agent loads both.
 ## Detaching
 
 ```bash
-python3 .../toggle.py detach hormozi                      # global
-python3 .../toggle.py detach acme-business --scope project --cwd .
+python3 "$TOGGLE" detach hormozi                      # global
+python3 "$TOGGLE" detach acme-business --scope project --cwd .
 ```
 
 Detach removes a symlink and nothing else; the brain folder is untouched. If
@@ -83,7 +90,7 @@ detaching more than one brain at once.
 ## Listing
 
 ```bash
-python3 .../toggle.py list --cwd .
+python3 "$TOGGLE" list --cwd .
 ```
 
 Reports every scope it scanned and what is attached in each.
@@ -115,9 +122,9 @@ Ask the member for the file's path if it is not obvious — the common ones are
 **Show the diff before the first write:**
 
 ```bash
-python3 .../toggle.py pointer-diff ~/.gemini/GEMINI.md ~/brains/hormozi
-python3 .../toggle.py pointer-add  ~/.gemini/GEMINI.md ~/brains/hormozi
-python3 .../toggle.py pointer-remove ~/.gemini/GEMINI.md hormozi
+python3 "$TOGGLE" pointer-diff ~/.gemini/GEMINI.md ~/brains/hormozi
+python3 "$TOGGLE" pointer-add  ~/.gemini/GEMINI.md ~/brains/hormozi
+python3 "$TOGGLE" pointer-remove ~/.gemini/GEMINI.md hormozi
 ```
 
 What goes in is a delimited block — three lines, appended:
@@ -157,5 +164,5 @@ Rules, non-negotiable:
 linter first:
 
 ```bash
-python3 skills/brain-builder/scripts/lint.py ~/brains/hormozi
+python3 ~/.claude/skills/brain-builder/scripts/lint.py ~/brains/hormozi
 ```

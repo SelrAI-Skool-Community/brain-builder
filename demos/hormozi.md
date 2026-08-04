@@ -195,8 +195,8 @@ all 30 videos.
 ## Rebuild status
 
 **Not rebuilt through the kit yet.** The four expected answers above come from
-the prototype build of this same corpus (planning ticket CORE-128, recorded in
-[`docs/research/prototype-findings.md`](../docs/research/prototype-findings.md)),
+the prototype build of this same corpus, recorded in
+[`docs/research/prototype-findings.md`](../docs/research/prototype-findings.md),
 which is why they are marked verified rather than `unverified-until-rebuild`.
 
 What the rebuild has to confirm is that the *kit* reproduces them: same corpus,

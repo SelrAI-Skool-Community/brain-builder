@@ -64,7 +64,7 @@ class SymlinkArm(BrainOnDisk):
     """Attach is a symlink into a skills directory. Nothing is ever copied."""
 
     def setUp(self):
-        super(SymlinkArm, self).setUp()
+        super().setUp()
         self.skills = os.path.join(self.tmp, "harness", "skills")
 
     def link_path(self, slug="test-brain", skills=None):
@@ -119,7 +119,8 @@ class SymlinkArm(BrainOnDisk):
         brain = self.minimal_brain()
         toggle.attach(brain, self.skills)
         removed = toggle.detach("test-brain", self.skills)
-        self.assertEqual(self.link_path(), removed)
+        self.assertEqual(self.link_path(), removed.link)
+        self.assertEqual(real(brain), removed.target)
         self.assertFalse(os.path.lexists(self.link_path()))
         self.assertTrue(os.path.isfile(os.path.join(brain, "index.md")))
 
@@ -146,9 +147,6 @@ class SymlinkArm(BrainOnDisk):
     def test_listing_flags_a_link_whose_brain_has_gone_away(self):
         brain = self.minimal_brain()
         toggle.attach(brain, self.skills)
-        for name in os.listdir(brain):
-            path = os.path.join(brain, name)
-            os.remove(path) if os.path.isfile(path) else None
         os.rename(brain, brain + "-gone")
         self.assertTrue(toggle.attachments(self.skills)[0].dangling)
 
@@ -164,7 +162,7 @@ class ScopeChange(BrainOnDisk):
     """A brain attached globally is moved to a project, never duplicated."""
 
     def setUp(self):
-        super(ScopeChange, self).setUp()
+        super().setUp()
         self.brain = self.minimal_brain()
         self.global_skills = os.path.join(self.tmp, "home", ".claude", "skills")
         self.project_skills = os.path.join(self.tmp, "proj", ".claude", "skills")
@@ -182,11 +180,26 @@ class ScopeChange(BrainOnDisk):
         toggle.attach(self.brain, self.global_skills)
         result = toggle.attach(self.brain, self.project_skills,
                                elsewhere=[self.global_skills], move=True)
-        self.assertEqual("moved", result.action)
         self.assertEqual(os.path.join(self.global_skills, "test-brain"), result.moved_from)
         self.assertEqual([], toggle.attachments(self.global_skills))
         self.assertEqual(["test-brain"],
                          [item.slug for item in toggle.attachments(self.project_skills)])
+
+    def test_a_same_named_link_to_a_different_brain_is_left_alone(self):
+        impostor = self.minimal_brain(slug="decoy")
+        os.makedirs(self.global_skills)
+        os.symlink(impostor, os.path.join(self.global_skills, "test-brain"))
+        result = toggle.attach(self.brain, self.project_skills,
+                               elsewhere=[self.global_skills], move=True)
+        self.assertIsNone(result.moved_from)
+        self.assertEqual(real(impostor),
+                         os.path.realpath(os.path.join(self.global_skills, "test-brain")))
+
+    def test_a_global_attach_stops_when_the_brain_is_already_on_in_the_project(self):
+        toggle.attach(self.brain, self.project_skills)
+        with self.assertRaises(toggle.AttachedElsewhere):
+            toggle.attach(self.brain, self.global_skills,
+                          elsewhere=[self.project_skills])
 
     def test_an_unattached_brain_is_linked_straight_into_the_project(self):
         result = toggle.attach(self.brain, self.project_skills,
@@ -225,7 +238,7 @@ class PointerArm(BrainOnDisk):
     )
 
     def setUp(self):
-        super(PointerArm, self).setUp()
+        super().setUp()
         self.brain = self.minimal_brain()
         self.instructions = os.path.join(self.tmp, "AGENTS.md")
 
@@ -307,6 +320,13 @@ class PointerArm(BrainOnDisk):
         self.assertEqual("added", action)
         self.assertTrue(self.read_instructions().startswith("<!-- brain: test-brain -->"))
 
+    def test_an_unreadable_instruction_file_is_never_overwritten_with_the_block(self):
+        directory_not_a_file = os.path.join(self.tmp, "instructions-dir")
+        os.makedirs(directory_not_a_file)
+        with self.assertRaises(OSError):
+            toggle.apply_pointer(directory_not_a_file, "test-brain", self.brain)
+        self.assertTrue(os.path.isdir(directory_not_a_file))
+
     def test_removing_a_block_that_is_not_there_changes_nothing(self):
         self.write_instructions(self.MEMBER_TEXT)
         self.assertFalse(toggle.remove_pointer(self.instructions, "test-brain"))
@@ -328,7 +348,7 @@ class CommandLine(BrainOnDisk):
     """The surface SKILL.md drives. `--home` keeps tests off the real machine."""
 
     def setUp(self):
-        super(CommandLine, self).setUp()
+        super().setUp()
         self.home = os.path.join(self.tmp, "home")
         self.project = os.path.join(self.tmp, "project")
         os.makedirs(os.path.join(self.project, ".git"))
@@ -407,14 +427,6 @@ class CommandLine(BrainOnDisk):
         self.assertIn("test-brain", out)
         self.assertIn("global", out)
 
-    def test_list_shows_brains_that_are_off_when_told_where_brains_live(self):
-        self.minimal_brain(slug="off-brain")
-        code, out, _ = self.run_cli("list", "--home", self.home, "--cwd", self.project,
-                                    "--brains-dir", self.tmp)
-        self.assertEqual(0, code)
-        self.assertIn("off-brain", out)
-        self.assertIn("off", out)
-
     def test_pointer_diff_writes_nothing_and_pointer_add_then_remove_round_trips(self):
         brain = self.minimal_brain()
         instructions = os.path.join(self.tmp, "AGENTS.md")
@@ -436,6 +448,35 @@ class CommandLine(BrainOnDisk):
     def test_an_unknown_command_is_a_usage_error(self):
         self.assertEqual(2, self.run_cli("frobnicate")[0])
 
+    def test_bare_invocation_prints_usage_to_stderr_and_fails(self):
+        code, out, err = self.run_cli()
+        self.assertEqual(2, code)
+        self.assertEqual("", out)
+        self.assertIn("usage:", err)
+
+    def test_help_prints_usage_to_stdout_and_succeeds(self):
+        code, out, _ = self.run_cli("--help")
+        self.assertEqual(0, code)
+        self.assertIn("usage:", out)
+
+    def test_a_global_attach_over_a_project_one_stops_too(self):
+        brain = self.minimal_brain()
+        self.run_cli("attach", brain, "--scope", "project",
+                     "--cwd", self.project, "--home", self.home)
+        code, _, err = self.run_cli("attach", brain, "--cwd", self.project,
+                                    "--home", self.home)
+        self.assertEqual(3, code)
+        self.assertIn("--move", err)
+
+    def test_the_same_brain_may_be_attached_to_a_second_harness(self):
+        brain = self.minimal_brain()
+        self.run_cli("attach", brain, "--home", self.home)
+        code, _, _ = self.run_cli("attach", brain, "--harness", "codex",
+                                  "--home", self.home)
+        self.assertEqual(0, code)
+        self.assertEqual(["test-brain"], [item.slug for item in toggle.attachments(
+            self.home_skills("codex"))])
+
     def test_attaching_something_that_is_not_a_brain_fails_without_linking(self):
         code, _, err = self.run_cli("attach", self.tmp, "--home", self.home)
         self.assertEqual(1, code)
@@ -446,7 +487,7 @@ class DemoPath(BrainOnDisk):
     """The shipped demo: the fixture brain on globally, then per project, then off."""
 
     def setUp(self):
-        super(DemoPath, self).setUp()
+        super().setUp()
         self.brain = os.path.join(FIXTURES_DIR, "sourdough-baking")
         self.home = os.path.join(self.tmp, "home")
         self.project = os.path.join(self.tmp, "project")
@@ -463,7 +504,7 @@ class DemoPath(BrainOnDisk):
 
         moved = toggle.attach(self.brain, project_skills,
                               elsewhere=[global_skills], move=True)
-        self.assertEqual("moved", moved.action)
+        self.assertEqual(first.link, moved.moved_from)
         self.assertEqual([], toggle.attachments(global_skills))
         self.assertEqual(["sourdough-baking"],
                          [item.slug for item in toggle.attachments(project_skills)])
@@ -473,7 +514,10 @@ class DemoPath(BrainOnDisk):
         self.assertTrue(os.path.isfile(os.path.join(self.brain, "index.md")))
 
     def test_the_fixture_brain_satisfies_the_pre_attach_check(self):
-        self.assertIsNone(toggle.check_brain(self.brain))
+        try:
+            toggle.check_brain(self.brain)
+        except toggle.ToggleError as refused:
+            self.fail("the shipped fixture brain was refused: {}".format(refused))
 
 
 if __name__ == "__main__":

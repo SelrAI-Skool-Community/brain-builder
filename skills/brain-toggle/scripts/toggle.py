@@ -1,4 +1,7 @@
+#!/usr/bin/env python3
 """Attach and detach brains from the harnesses on this machine (spec.md §7).
+
+    python3 toggle.py <command> [options]      # no arguments prints the usage
 
 Two mechanical arms, and nothing else:
 
@@ -130,39 +133,43 @@ def slug_of(path):
     return os.path.basename(os.path.abspath(path))
 
 
-def attach(brain, skills_dir, elsewhere=(), move=False):
-    """Link `brain` into `skills_dir`, and report what that took.
+def attach(brain, target, elsewhere=(), move=False):
+    """Link `brain` into the `target` skills directory, and report what it took.
 
-    `elsewhere` names other skills directories to check first: an attachment
-    found there is a decision for the member, so it raises `AttachedElsewhere`
-    unless `move` is set, in which case it is detached before linking. That is
-    what keeps a brain from ending up with two routers loaded at once.
+    `elsewhere` names the other skills directories of the *same harness* — the
+    ones that would load alongside `target` and give the member two copies of
+    this brain's router. An attachment found there is a decision, so it raises
+    `AttachedElsewhere` unless `move` is set, in which case it is detached
+    first. A link of the same name pointing at some *other* brain is not this
+    brain's attachment and is never touched.
     """
     brain = os.path.abspath(brain)
     check_brain(brain)
     slug = slug_of(brain)
-    link = os.path.join(os.path.abspath(skills_dir), slug)
+    link = os.path.join(os.path.abspath(target), slug)
 
     moved_from = None
     for other in elsewhere:
         existing = os.path.join(os.path.abspath(other), slug)
-        if existing == link or not os.path.islink(existing):
+        if existing == link or not _links_to(existing, brain):
             continue
         if not move:
             raise AttachedElsewhere(slug, existing)
         detach(slug, other)
         moved_from = existing
 
-    action = _link(brain, link)
-    if moved_from:
-        action = "moved"
-    return Attached(slug=slug, link=link, target=brain, action=action,
+    return Attached(slug=slug, link=link, target=brain, action=_link(brain, link),
                     moved_from=moved_from, warnings=stale_router_warnings(brain))
+
+
+def _links_to(link, brain):
+    """Whether `link` is a symlink standing for this exact brain."""
+    return os.path.islink(link) and os.path.realpath(link) == os.path.realpath(brain)
 
 
 def _link(brain, link):
     if os.path.islink(link):
-        if os.path.realpath(link) == os.path.realpath(brain):
+        if _links_to(link, brain):
             return "already-attached"
         os.remove(link)
     elif os.path.exists(link):
@@ -174,16 +181,23 @@ def _link(brain, link):
     return "linked"
 
 
-def detach(slug, skills_dir):
-    """Remove the brain's link from `skills_dir`. Returns the path, or None.
+def detach(slug, target):
+    """Remove the brain's link from the `target` skills directory.
 
-    Only ever removes a symlink: a real directory at the target belongs to
-    someone else, and is reported rather than deleted.
+    Returns an `Attachment` describing what was unlinked, or None if there was
+    nothing to unlink. In a skills directory the link's *name* is the brain's
+    identity, so the name is what detach goes by — the target it pointed at is
+    reported back so the member can see what came off.
+
+    Only ever removes a symlink: a real directory belongs to someone else, and
+    is reported rather than deleted.
     """
-    link = os.path.join(os.path.abspath(skills_dir), slug)
+    link = os.path.join(os.path.abspath(target), slug)
     if os.path.islink(link):
+        pointed_at = os.path.realpath(link)
         os.remove(link)
-        return link
+        return Attachment(slug=slug, link=link, target=pointed_at,
+                          dangling=not os.path.isdir(pointed_at))
     if os.path.exists(link):
         raise ToggleError(
             "{} is a real directory, not a brain link — refusing to remove "
@@ -191,12 +205,12 @@ def detach(slug, skills_dir):
     return None
 
 
-def attachments(skills_dir):
-    """Every brain link in `skills_dir`, in slug order.
+def attachments(target):
+    """Every brain link in the `target` skills directory, in slug order.
 
     Real directories are the member's own skills, and are left out.
     """
-    base = os.path.abspath(skills_dir)
+    base = os.path.abspath(target)
     if not os.path.isdir(base):
         return []
     found = []
@@ -263,11 +277,16 @@ def render_pointer(slug, brain):
 
 
 def read_text(path):
-    """A file's contents, or "" when it does not exist yet."""
+    """A file's contents, or "" when it does not exist yet.
+
+    Only a missing file reads as empty. Any other error — unreadable, a
+    directory — must propagate: treating it as empty would append the block to
+    nothing and overwrite what the member wrote.
+    """
     try:
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
-    except IOError:
+    except FileNotFoundError:
         return ""
 
 
@@ -359,26 +378,27 @@ USAGE = """usage: toggle.py <command> [options]
 
   attach <brain-dir>   link a brain into a harness  [--move to relocate it]
   detach <slug>        remove that link
-  list                 what is attached, and where  [--brains-dir DIR]
+  list                 what is attached, and where
   resolve              print the skills directory an attach would use
   pointer-add <file> <brain-dir>     append the pointer block
   pointer-remove <file> <slug>       take it back out
   pointer-diff <file> <brain-dir>    show the change without making it
 
 options: --harness {harnesses}  --scope {scopes}
-         --skills-dir DIR (overrides both)  --cwd DIR  --home DIR
+         --skills-dir DIR (an unlisted harness; overrides both)  --cwd DIR  --home DIR
 
 exit: 0 done  1 failed  2 usage  3 needs a decision from the member
 """.format(harnesses="|".join(sorted(HARNESSES)), scopes="|".join(SCOPES))
 
-_FLAGS = ("--harness", "--scope", "--cwd", "--home", "--skills-dir", "--brains-dir")
+_FLAGS = ("--harness", "--scope", "--cwd", "--home", "--skills-dir")
 
 
 def _parse(argv):
+    # The same shape as the builder scripts' hand-rolled parsers. Kept separate
+    # rather than shared: brain-toggle installs on its own, without the builder.
     positional = []
     options = {"--harness": "claude-code", "--scope": "global", "--cwd": None,
-               "--home": None, "--skills-dir": None, "--brains-dir": None,
-               "--move": False}
+               "--home": None, "--skills-dir": None, "--move": False}
     pending = iter(argv)
     for arg in pending:
         name, _, inline = arg.partition("=")
@@ -403,6 +423,24 @@ def _target_dir(options, scope=None):
                       cwd=options["--cwd"], home=options["--home"])
 
 
+def _sibling_scopes(options):
+    """The other skills directories that would load alongside the target.
+
+    Only the *same* harness's other scopes: a harness loads its global and
+    project directories together, so a brain in both gives that harness two
+    routers. A different harness is a different agent and never loads both, so
+    attaching the same brain to Claude Code and to Codex is not a duplicate.
+
+    `--skills-dir` names a directory belonging to a harness this script does
+    not know, so its sibling scopes cannot be worked out; nothing is checked.
+    """
+    if options["--skills-dir"]:
+        return []
+    return [skills_dir(options["--harness"], scope, cwd=options["--cwd"],
+                       home=options["--home"])
+            for scope in SCOPES if scope != options["--scope"]]
+
+
 def _cmd_resolve(positional, options):
     print(_target_dir(options))
     return 0
@@ -413,12 +451,9 @@ def _cmd_attach(positional, options):
         raise ToggleError("attach takes one brain directory")
     target = _target_dir(options)
     print("target: {}".format(target))
-    elsewhere = []
-    if not options["--skills-dir"] and options["--scope"] == "project":
-        elsewhere = [_target_dir(options, scope="global")]
-    result = attach(positional[0], target, elsewhere=elsewhere,
+    result = attach(positional[0], target, elsewhere=_sibling_scopes(options),
                     move=options["--move"])
-    if result.action == "moved":
+    if result.moved_from:
         print("moved {} from {} to {}".format(result.slug, result.moved_from, result.link))
     elif result.action == "already-attached":
         print("{} was already attached at {}".format(result.slug, result.link))
@@ -434,34 +469,22 @@ def _cmd_detach(positional, options):
         raise ToggleError("detach takes one slug")
     slug = positional[0]
     removed = detach(slug, _target_dir(options))
-    print("detached {}".format(removed) if removed
+    print("detached {} (was -> {})".format(removed.link, removed.target) if removed
           else "{} is not attached there".format(slug))
     return 0
 
 
 def _cmd_list(positional, options):
-    seen = set()
+    """What is attached, and where. Not an inventory of installed brains."""
     for name in sorted(HARNESSES):
         for scope in SCOPES:
             directory = skills_dir(name, scope, cwd=options["--cwd"],
                                    home=options["--home"])
             print("scanned {} {} {}".format(name, scope, directory))
             for item in attachments(directory):
-                seen.add(item.slug)
                 print("  {} [{} {}] -> {}{}".format(
                     item.slug, name, scope, item.target,
                     "  (BROKEN: target is gone)" if item.dangling else ""))
-    brains_dir = options["--brains-dir"]
-    if brains_dir:
-        for slug in sorted(os.listdir(brains_dir)):
-            path = os.path.join(brains_dir, slug)
-            if slug in seen or not os.path.isdir(path):
-                continue
-            try:
-                check_brain(path)
-            except ToggleError:
-                continue
-            print("  {} [off] -> {}".format(slug, path))
     return 0
 
 
@@ -504,9 +527,12 @@ COMMANDS = {
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] in ("-h", "--help", "help"):
+    if len(argv) < 2:
+        sys.stderr.write(USAGE)
+        return 2
+    if argv[1] in ("-h", "--help", "help"):
         sys.stdout.write(USAGE)
-        return 0 if len(argv) > 1 else 2
+        return 0
     command = COMMANDS.get(argv[1])
     if command is None:
         sys.stderr.write("toggle.py: unknown command {!r}\n\n".format(argv[1]))

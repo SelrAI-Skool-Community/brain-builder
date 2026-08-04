@@ -17,7 +17,8 @@ In build. When it ships, this repo carries the skill (`SKILL.md`), one paste-in 
 - `docs/research/` - design records from the planning effort
 - `docs/rights.md` - the content-rights stance the kit is built to
 - `seed/` - prior assets the build reworks: the YouTube ingestion arm and an attach/detach prototype
-- Brains attach globally or per project in skills-directory harnesses (Claude Code, Codex); harnesses that read an instruction file instead (OpenClaw, Gemini) are global-only in v1
+
+Brains attach globally or per project in skills-directory harnesses (Claude Code, Codex); harnesses that read an instruction file instead (OpenClaw, Gemini) are global-only in v1.
 
 ## What you're responsible for
 

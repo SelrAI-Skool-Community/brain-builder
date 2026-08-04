@@ -1,6 +1,6 @@
 ---
 name: brain-toggle
-description: "Turn a knowledge brain on or off for this machine's agent harnesses. Use when the user says 'turn on my <name> brain', 'attach the <name> brain', 'switch off <name>', 'detach <name>', 'which brains do I have', 'what's attached', or wants a brain on only inside one project."
+description: "Turn a knowledge brain on or off for this machine's agent harnesses. Use when the user says 'turn on my <name> brain', 'attach the <name> brain', 'switch off <name>', 'detach <name>', 'what's attached where', or wants a brain on only inside one project."
 ---
 
 # Brain Toggle
@@ -23,7 +23,7 @@ Run it with no arguments for the full option list.
 | Harness kind | Mechanism | Scopes |
 |---|---|---|
 | Skills directory — Claude Code, Claude Agent SDK, Codex, any SKILL.md-standard harness | symlink the brain folder in | global + project |
-| Instruction file — OpenClaw, Gemini, Hermes | a delimited pointer block | global only in v1 |
+| Instruction file — OpenClaw, Gemini | a delimited pointer block | global only in v1 |
 
 Neither needs a restart.
 
@@ -56,14 +56,17 @@ project attachment stacks on top of whatever is global.
 
 ### Already attached somewhere else
 
-A project attach for a brain that is already global exits **3** and does
-nothing. Do not retry blindly. Offer the choice:
+A project attach for a brain that is already global — or a global attach for
+one already on in this project — exits **3** and does nothing. Do not retry
+blindly. Offer the choice:
 
 > `hormozi` is already on globally. Move it into this project, or leave it
 > global and on everywhere?
 
 Re-run with `--move` only if they choose to move. Never end up with the same
-brain attached twice — that loads two copies of the router.
+brain attached twice in one harness — that loads two copies of the router. The
+check is per harness: the same brain on in Claude Code *and* in Codex is fine,
+since no single agent loads both.
 
 ## Detaching
 
@@ -80,12 +83,13 @@ detaching more than one brain at once.
 ## Listing
 
 ```bash
-python3 .../toggle.py list --cwd . --brains-dir ~/brains
+python3 .../toggle.py list --cwd .
 ```
 
-Reports every scope it scanned, what is attached in each, and — with
-`--brains-dir` — the brains that are currently off. `(BROKEN: target is gone)`
-means the brain was moved or deleted out from under the link.
+Reports every scope it scanned and what is attached in each.
+`(BROKEN: target is gone)` means the brain was moved or deleted out from under
+the link. This lists what is *attached*, not what is installed — an inventory
+of the brains on the machine is out of scope for v1.
 
 ## Assisted split — "brain X in this terminal, brain Y in another"
 
@@ -130,7 +134,9 @@ Rules, non-negotiable:
   inject whole on every turn; a brain in one is a permanent context bill. The
   block points, and that is all.
 - **Never reformat what the member wrote.** The block is appended, or replaced
-  between its own delimiters. Removal restores the file byte for byte.
+  between its own delimiters, and removal restores the file byte for byte. The
+  one exception, and it is unavoidable: a file that did not end in a newline
+  gains one, because a line cannot be appended to a file that does not end.
 - Instruction-file harnesses are **global-only in v1**. Project-scoped pointer
   blocks are not built.
 

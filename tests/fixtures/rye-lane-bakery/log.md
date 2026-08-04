@@ -19,5 +19,8 @@ organisation's paperwork could not be committed to a public repo.
 - 2026-06-01 — taxonomy: 4 entities and processes, 1 standing policy.
 - 2026-06-01 — pages: 4 written + 1 standing page, 11 cross-links.
 - 2026-06-01 — router generated, lint clean.
+- 2026-06-01 — **calibration** (re-run after any pricing write-back): "what does
+  the wholesale sourdough cost?" → £3.10, as of 2026-06-01, with the pending 9 %
+  flour rise named and the shared-drive rate card given as canonical.
 - 2026-06-14 — write-back: `wiki/ferren-cafe.md` re-dated after the account's
   Saturday-drop question; `as_of` moved to 2026-06-14.

@@ -123,8 +123,10 @@ generating a plausible position and attributing it to them.
 ## Calibration
 
 Ask the brain **one question whose answer you already know from the corpus** the
-moment it is built — a figure, a stance, a distinction they draw. Two things get
-checked at once and both matter:
+moment it is built — a figure, a stance, a distinction they draw. **Write the
+question and the answer it should give into `log.md`**, so the check is a fixed
+one that can be re-run after a write-back rather than whatever comes to mind on
+the day. Two things get checked at once and both matter:
 
 - **The fact lands.** The number is theirs and it is right.
 - **The voice lands.** It sounds like them at the length they would answer at,

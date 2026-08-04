@@ -33,7 +33,14 @@ Stdlib only.
 import os
 import sys
 
-from brain_contract import DEFAULT_KIND, OVERLAY_DIRS, default_stance, read_page
+from brain_contract import (
+    BUSINESS_KIND,
+    DEFAULT_KIND,
+    OVERLAY_DIRS,
+    PERSONA_KIND,
+    default_stance,
+    read_page,
+)
 
 PERSONA_OVERLAY, STANDING_OVERLAY = OVERLAY_DIRS
 
@@ -58,7 +65,24 @@ class BrainMeta(object):
     @property
     def speaks_as_persona(self):
         """Voice files plus the stance to use them. Either alone is not a persona."""
-        return self.has_persona and self.stance == "persona"
+        return self.has_persona and self.answers_in_a_persons_voice
+
+    @property
+    def answers_in_a_persons_voice(self):
+        """Whether this brain will answer *as somebody* — the stance decides.
+
+        Deliberately not `has_persona`: the anti-caricature brake is mandatory
+        (spec.md §4), and a `kind: persona` brain whose overlay has not been
+        written yet still takes the persona stance and still speaks as them. A
+        brake that vanishes with a missing folder is no brake. It is not
+        `kind` either — a declared stance always wins, and a persona-kind brain
+        that has explicitly opted into the advisor stance imitates nobody.
+        """
+        return self.stance == PERSONA_KIND
+
+    @property
+    def is_business(self):
+        return self.kind == BUSINESS_KIND
 
     @property
     def has_standing(self):
@@ -158,11 +182,13 @@ def _sections(meta):
     """
     sections = [_header(meta), _navigation(), _stance(meta)]
     if meta.speaks_as_persona:
-        sections += [_persona_overlay(meta), _anti_caricature(meta), _calibration(meta)]
+        sections.append(_persona_overlay(meta))
+    if meta.answers_in_a_persons_voice:
+        sections += [_anti_caricature(meta), _calibration(meta)]
     if meta.has_standing:
         sections.append(_standing_overlay())
-    sections.append(_answering())
-    if meta.kind == "business":
+    sections.append(_answering(meta))
+    if meta.is_business:
         sections += [_freshness(), _confidentiality()]
     sections += [_citation(meta), _write_back(), _conflicts()]
     return sections
@@ -206,7 +232,7 @@ def _stance(meta):
     if meta.speaks_as_persona:
         lines.append("- This brain declares a persona. See the persona overlay below; it changes")
         lines.append("  the voice, never the facts.")
-    if meta.kind == "business":
+    if meta.is_business:
         lines += [
             "- **Outside the business, never inside it.** This brain holds one",
             "  organisation's own facts and you are not that organisation: \"you offer X\",",
@@ -275,6 +301,9 @@ def _calibration(meta):
         "  `index.md`'s one-liners carry the real numbers, so a known answer is always to",
         "  hand. Both halves are checked at once: the fact lands, and it sounds like",
         "  {} at the length they would actually answer at.".format(meta.title),
+        "- The question and the answer it should give are **written into `log.md`** at",
+        "  build time, so the check is a fixed one rather than whatever comes to mind. Ask",
+        "  it again after any write-back that touches the pages it runs through.",
         "- A voice miss is an overlay problem — too few exemplars, or exemplars with no",
         "  range. A fact miss is a thin page or a `## Known gaps` entry. They are fixed in",
         "  different places, so name which one missed.",
@@ -291,7 +320,19 @@ def _standing_overlay():
     ])
 
 
-def _answering():
+def _answering(meta):
+    """The shared answering rules.
+
+    The fast-volatility rule is stated here for every kind that has no
+    `## Freshness` block of its own — freshness frontmatter belongs to the
+    business kind but is available to any brain (spec.md §2). A business brain
+    gets the fuller treatment instead, and stating it in both places would leave
+    the same rule in one router twice.
+    """
+    freshness = [] if meta.is_business else [
+        "- Facts from pages marked `volatility: fast` are answered with their **as-of date",
+        "  attached in the same breath** — the number stays exact, the date is the honesty.",
+    ]
     return "\n".join([
         "## Answering",
         "",
@@ -307,9 +348,7 @@ def _answering():
         "- **Out-of-domain questions are answered normally** from general knowledge, with",
         "  **no disclaimer** and no Sources block. Not every question in a session is a",
         "  question for this brain.",
-        "- Facts from pages marked `volatility: fast` are answered with their **as-of date",
-        "  attached in the same breath** — the number stays exact, the date is the honesty.",
-    ])
+    ] + freshness)
 
 
 def _freshness():
@@ -346,13 +385,14 @@ def _confidentiality():
         "  in a disguise when there are four of them.",
         "- Drafting anything a named client will read uses their page, the offers, and",
         "  standing policy. No other client's page is opened for it.",
-        "- Asked for a cross-client comparison, give one. The rule is that it never",
-        "  happens by default.",
+        "- The rule is **unasked**, not *never*: a member who explicitly asks to compare",
+        "  accounts gets the comparison. It simply never happens on the way to answering",
+        "  something else.",
     ])
 
 
 def _citation(meta):
-    if meta.kind == "business":
+    if meta.is_business:
         weight = [
             "- **Exactly one closing `Sources` block**, and for this business brain it is",
             "  conditional: only on answers carrying numbers, prices, dates, or commitments,",
@@ -363,6 +403,12 @@ def _citation(meta):
             "- **Exactly one closing `Sources` block.** Every answer grounded in this brain",
             "  ends with one — never two, never scattered through the prose.",
         ]
+    # `standing/` is routed like `wiki/`, so an answer can be grounded in it —
+    # and a grounded answer with no sanctioned path form is an uncitable answer.
+    standing = [
+        "- `standing/` is routed like `wiki/`, so cite it the same way:",
+        "  `standing/<page>.md`, or `{}/standing/<page>.md` when stacked.".format(meta.slug),
+    ] if meta.has_standing else []
     return "\n".join([
         "## Citation",
         "",
@@ -372,6 +418,7 @@ def _citation(meta):
         "  asides, never the spine of an answer.",
         "- In stacked sessions, prefix every path with this brain's slug:",
         "  `{}/wiki/<page>.md`.".format(meta.slug),
+    ] + standing + [
         "- **Never cite `raw/`** except when quoting it verbatim. A wiki page's frontmatter",
         "  is the chain back to source.",
         "- Out-of-domain answers carry no Sources block at all.",

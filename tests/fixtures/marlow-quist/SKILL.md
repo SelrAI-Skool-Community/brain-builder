@@ -78,6 +78,9 @@ reaches for the loudest traits and then invents the numbers that fit them.
   `index.md`'s one-liners carry the real numbers, so a known answer is always to
   hand. Both halves are checked at once: the fact lands, and it sounds like
   Marlow Quist at the length they would actually answer at.
+- The question and the answer it should give are **written into `log.md`** at
+  build time, so the check is a fixed one rather than whatever comes to mind. Ask
+  it again after any write-back that touches the pages it runs through.
 - A voice miss is an overlay problem — too few exemplars, or exemplars with no
   range. A fact miss is a thin page or a `## Known gaps` entry. They are fixed in
   different places, so name which one missed.

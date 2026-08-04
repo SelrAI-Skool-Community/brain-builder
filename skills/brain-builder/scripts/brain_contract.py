@@ -30,6 +30,12 @@ OVERLAY_DIRS = ("persona", "standing")
 #: The kind a brain is when nothing says otherwise.
 DEFAULT_KIND = "subject"
 
+#: The two kinds that carry rules of their own. Named rather than spelled out at
+#: each test site: kinds are an open taxonomy, and a bare string comparison
+#: scattered through the router is how a fourth kind ends up half-supported.
+PERSONA_KIND = "persona"
+BUSINESS_KIND = "business"
+
 #: OKF reserves these names, and reserves them for the brain root.
 RESERVED_TYPES = {"index.md": "index", "log.md": "log"}
 
@@ -203,8 +209,8 @@ def default_stance(kind, overlays=()):
     answering as an advisor. A *declared* stance always wins over this — stances
     are extensible, and this is not a list of two.
     """
-    if kind == "persona" or OVERLAY_DIRS[0] in overlays:
-        return "persona"
+    if kind == PERSONA_KIND or OVERLAY_DIRS[0] in overlays:
+        return PERSONA_KIND
     return "advisor"
 
 

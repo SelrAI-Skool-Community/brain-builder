@@ -174,6 +174,11 @@ class TheStackingContractHoldsInBothRouters(unittest.TestCase):
         self.assertIn("marlow-quist/wiki/<page>.md", router_of(PERSONA))
         self.assertIn("rye-lane-bakery/wiki/<page>.md", router_of(BUSINESS))
 
+    def test_the_routed_overlay_is_citable_and_the_loaded_one_is_not(self):
+        """`standing/` grounds answers, so it needs a path; `persona/` is not evidence."""
+        self.assertIn("rye-lane-bakery/standing/<page>.md", router_of(BUSINESS))
+        self.assertIn("never cited", flatten(router_of(PERSONA)))
+
     def test_no_router_ever_relays_a_third_party_at_arms_length(self):
         self.assertBothCarry("no middleman", "banned")
 

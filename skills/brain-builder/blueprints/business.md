@@ -172,7 +172,10 @@ being wrong.
 
 Ask it one of the member's own questions with a **checkable** answer — a price, a
 client's current status, the steps of a process they know. The answer either
-carries the right number with its date attached, or it does not.
+carries the right number with its date attached, or it does not. Record the
+question and its expected answer in `log.md` alongside the authority ranking:
+this kind goes stale, so the calibration is worth re-running, and one that was
+never written down cannot be.
 
 Ask a stale-fact question too: something the member knows has changed recently.
 A brain that answers it with the old number *and its date* is working as

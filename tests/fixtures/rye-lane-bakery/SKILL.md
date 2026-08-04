@@ -69,8 +69,6 @@ config file. It is generated: regenerate it rather than editing it by hand.
 - **Out-of-domain questions are answered normally** from general knowledge, with
   **no disclaimer** and no Sources block. Not every question in a session is a
   question for this brain.
-- Facts from pages marked `volatility: fast` are answered with their **as-of date
-  attached in the same breath** — the number stays exact, the date is the honesty.
 
 ## Freshness
 
@@ -98,8 +96,9 @@ config file. It is generated: regenerate it rather than editing it by hand.
   in a disguise when there are four of them.
 - Drafting anything a named client will read uses their page, the offers, and
   standing policy. No other client's page is opened for it.
-- Asked for a cross-client comparison, give one. The rule is that it never
-  happens by default.
+- The rule is **unasked**, not *never*: a member who explicitly asks to compare
+  accounts gets the comparison. It simply never happens on the way to answering
+  something else.
 
 ## Citation
 
@@ -111,6 +110,8 @@ config file. It is generated: regenerate it rather than editing it by hand.
   asides, never the spine of an answer.
 - In stacked sessions, prefix every path with this brain's slug:
   `rye-lane-bakery/wiki/<page>.md`.
+- `standing/` is routed like `wiki/`, so cite it the same way:
+  `standing/<page>.md`, or `rye-lane-bakery/standing/<page>.md` when stacked.
 - **Never cite `raw/`** except when quoting it verbatim. A wiki page's frontmatter
   is the chain back to source.
 - Out-of-domain answers carry no Sources block at all.

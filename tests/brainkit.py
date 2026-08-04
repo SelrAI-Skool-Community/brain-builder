@@ -21,6 +21,12 @@ def flatten(text):
     return re.sub(r"\s+", " ", text).lower()
 
 
+def read_text(path):
+    """A file's whole contents, decoded."""
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
 def page(body="Body.\n", **frontmatter):
     """A markdown page: frontmatter keys in order given, then the body."""
     lines = ["---"]

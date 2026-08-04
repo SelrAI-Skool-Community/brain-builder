@@ -42,9 +42,9 @@ follow links, never bulk-load, 2–3 pages per question) and how to speak (lead
 with the answer, hold a stance, one closing `Sources` block, refuse honestly
 inside the domain and answer normally outside it).
 
-Retrieval is an agent reading files. That ceiling sits in the thousands of
-pages, far above any brain you will build, and it means a brain works standing
-alone on any machine with nothing installed.
+Retrieval is an agent reading files. That ceiling runs from the high hundreds to
+around 5,000 pages, far above any brain you will build, and it means a brain
+works standing alone on any machine with nothing installed.
 
 Attached brains cost roughly their router's description in idle context — about
 140 tokens. The body only loads when the router fires.

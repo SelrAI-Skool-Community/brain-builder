@@ -68,9 +68,21 @@ skills with no reinstall step:
 ```bash
 SKILLS_DIR="$(python3 skills/brain-toggle/scripts/toggle.py resolve)"
 mkdir -p "$SKILLS_DIR"
-ln -sfn "$PWD/skills/brain-builder" "$SKILLS_DIR/brain-builder"
-ln -sfn "$PWD/skills/brain-toggle"  "$SKILLS_DIR/brain-toggle"
+for skill in brain-builder brain-toggle; do
+  link="$SKILLS_DIR/$skill"
+  if [ -e "$link" ] && [ ! -L "$link" ]; then
+    echo "$link exists and is not a symlink — move it aside yourself" >&2
+    exit 1
+  fi
+  ln -sfn "$PWD/skills/$skill" "$link"
+done
 ```
+
+**The guard is not decoration.** `ln -sfn` pointed at a path where a real
+directory already sits does not replace it and does not fail — it quietly
+creates the link *inside* it, at `$SKILLS_DIR/brain-builder/brain-builder`. The
+skill is then dead and `ls -l` looks fine. The same refusal is built into
+`toggle.py` for brains; this loop is that refusal for the two skills.
 
 Two consequences to state to the member in one line each, because both surprise
 people later:
@@ -227,7 +239,7 @@ first build is a separate conversation they start.
 |---|---|---|
 | The skill does not fire in a new session | linked into the wrong harness | re-run step 2 with `--harness`, then step 3 |
 | `… is not a brain — missing SKILL.md, wiki` | `attach` was pointed at a skill or a plain folder | `attach` takes brains; the kit installs by symlink (step 3) |
-| `… exists and is not a symlink` | a real directory sits at the link path | move it aside by hand; the script refuses to delete it |
+| `… exists and is not a symlink` | a real directory sits at the link path — from step 3's guard, or from `attach` | move it aside by hand; neither will delete it for you |
 | `warning: the router records brain_root …` | the brain folder was moved after it was built | run the `gen_router.py … --root …` command the warning prints |
 | Suite fails | a broken clone, or a stale interpreter | re-clone; check `python3 -V` is 3.7+ |
 

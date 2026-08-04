@@ -27,8 +27,9 @@ long and dense — the "Zero to Hero" series, the build-it-from-scratch walkthro
 the deep dives and the talks. The posts are shorter and carry the framings.
 
 Where the sources are:
-- YouTube: https://www.youtube.com/@AndrejKarpathy — take the channel, cap it at
-  30 videos, longest first. Captions where they exist.
+- YouTube: https://www.youtube.com/@AndrejKarpathy — enumerate the channel, pick
+  the 30 with the most teaching in them (the long lectures and walkthroughs, not
+  the short clips), and pass those URLs explicitly. Captions where they exist.
 - Blog: https://karpathy.bearblog.dev/ and https://karpathy.github.io/ —
   enumerate the post URLs from each archive page yourself, then ingest the posts
   individually. Don't ingest the archive index pages as content.
@@ -46,10 +47,12 @@ knowledge — the whole point is that I can tell the difference.
 
 ## What to expect
 
-- **The web arm takes article URLs, not a site.** It has no crawler, which is
-  why the prompt asks the builder to enumerate the post URLs first. That
-  enumeration is research, and research is the builder's job — it should not
-  come back and ask you for a list.
+- **Both arms take explicit targets, not a rule for picking them.** The web arm
+  has no crawler, and the YouTube arm's `--limit` truncates playlist order with
+  no way to sort — so "the 30 with the most teaching in them" is a selection the
+  builder makes and then passes as URLs, not a flag. That enumeration is
+  research, and research is the builder's job; it should not come back and ask
+  you for a list.
 - **`pip install trafilatura` and `pip install yt-dlp`** are both needed here,
   one per arm. If either is missing, that arm's sources fail by name with the
   install line on the record, and the other arm still runs.

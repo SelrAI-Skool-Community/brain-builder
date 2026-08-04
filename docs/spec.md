@@ -172,3 +172,17 @@ rather than inconvenient. Nothing above is edited silently.
   its numbers. The kit sends `scribe_v1` and exposes `ELEVENLABS_MODEL_ID` for
   the day that changes. No behavioural difference — recorded so the divergence
   between the spec's wording and the wire is not a surprise.
+- **2026-08-04 — §5 finish: attach, demo, *then show the graph*. §9's open
+  Obsidian question is closed.** As locked, §5 finished at "attach via the
+  toggle skill, then demo the brain with one of the member's own questions",
+  and §9 carried "whether Obsidian is recommended" as open fog. A build now
+  ends by opening the brain in Obsidian — installing it first, announced in one
+  line, through whatever package manager the machine already has — so the last
+  thing the member sees is their own material drawn as linked pages rather than
+  a folder. `open_in_obsidian.py` owns the mechanics: detect, register the
+  folder as a vault in `obsidian.json` without disturbing any vault already
+  there, and open it. Obsidian is **not** a dependency and not a
+  recommendation about how to *use* a brain — it is a viewer for the closing
+  demo, the graph is the member's one keystroke (there is no URI for it), and
+  every failure here is one line, never a failed build. (Founder feedback
+  pre-launch: the graph is the moment the brain stops looking like a folder.)

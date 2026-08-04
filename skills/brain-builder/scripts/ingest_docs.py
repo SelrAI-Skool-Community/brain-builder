@@ -32,8 +32,8 @@ from html.parser import HTMLParser
 import cli
 import ingest_local
 import rights
-from raw_store import (Manifest, RawStore, Record, log_manifest, report,
-                       walk_sources)
+from raw_store import (Manifest, RawStore, Record, log_manifest, missing_reason,
+                       report, walk_sources)
 
 #: What this arm reads. Everything else is another arm's job or nobody's.
 SUPPORTED = {".pdf": "pdf", ".epub": "epub"}
@@ -50,13 +50,16 @@ def ingest(paths, brain, readers=None):
     readers = readers or {"pdf": read_pdf, "epub": read_epub}
     store = RawStore(brain)
     manifest = Manifest(store.brain)
-    for path, _relpath in walk_sources(paths):
-        _ingest_one(path, store, manifest, readers)
+    for path, relpath in walk_sources(paths):
+        _ingest_one(path, relpath, store, manifest, readers)
     log_manifest(store.brain, manifest, "docs")
     return manifest
 
 
-def _ingest_one(path, store, manifest, readers):
+def _ingest_one(path, relpath, store, manifest, readers):
+    if relpath is None:                     # nothing at that path — never dropped
+        return manifest.add(Record(path, "failed", reason=missing_reason(path)))
+
     refusal = rights.refusal_for_file(path)
     if refusal:                             # refused before any reader opens it
         return manifest.add(Record(path, "failed", reason=refusal))

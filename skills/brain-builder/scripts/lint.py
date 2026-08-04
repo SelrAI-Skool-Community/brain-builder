@@ -14,12 +14,16 @@ What is checked:
                folders the contract has never heard of are ignored, not errors.
   frontmatter  OKF conformance — every routed page carries frontmatter with a
                `type`; the reserved names `index.md` and `log.md` carry their
-               reserved type and are not reused inside `wiki/`. Overlay pages
-               (`persona/`, `standing/`) are loaded whole rather than routed, so
-               the page rules do not bind them.
+               reserved type and are not reused inside `wiki/`. `persona/` is
+               loaded whole rather than routed, so the page rules do not bind
+               it; `standing/` is **unfenced** — routed and cited exactly like
+               `wiki/` (spec §4) — so they do.
   freshness    `as_of` / `volatility` / `canonical` are optional, and validated
                only where present.
   links        every relative markdown link resolves, and stays inside the brain.
+  fencing      `index.md` never links into `raw/`. Fencing is a router
+               instruction *and* exclusion from the index (spec §2); an index
+               that links a transcript has unfenced it for every session.
 
 Stdlib only.
 """
@@ -39,6 +43,9 @@ from brain_contract import (
 )
 
 KNOWN_GAPS_HEADING = "## Known gaps"
+
+#: The fenced folder, by the one name the contract gives it.
+RAW_DIR = OPTIONAL_DIRS[0]
 
 
 class Report(object):
@@ -118,14 +125,19 @@ def _check_router(root, report):
 
 
 def _check_index(root, report):
-    if KNOWN_GAPS_HEADING not in read_page(root, "index.md").body:
+    index = read_page(root, "index.md")
+    if KNOWN_GAPS_HEADING not in index.body:
         report.error("index.md has no `{}` section — honest refusal depends on it"
                      .format(KNOWN_GAPS_HEADING))
+    for target in index.links():
+        if target.split("#", 1)[0].startswith(RAW_DIR + "/"):
+            report.error("index.md links `{}` — `{}/` is fenced, and exclusion from "
+                         "the index is half of what fences it".format(target, RAW_DIR))
 
 
 def _check_frontmatter(page, report):
-    if page.in_overlay:
-        return  # overlays are loaded whole, not routed as OKF pages (spec §4)
+    if not page.is_routed:
+        return  # `persona/` is loaded whole, never routed as an OKF page (spec §4)
     if not page.has_frontmatter:
         report.error("{}: no frontmatter — every page carries OKF frontmatter"
                      .format(page.relpath))

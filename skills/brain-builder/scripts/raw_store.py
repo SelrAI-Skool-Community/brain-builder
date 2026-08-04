@@ -258,6 +258,13 @@ def walk_sources(paths):
     candidate is the same question for a folder of notes and a folder of books,
     and only the extension decides which arm can read it. Hidden files and
     Office lock files (`~$…`) are never candidates.
+
+    A path that yields **nothing** — it does not exist, or it is a folder with
+    no candidate files in it — comes back as `(path, None)` rather than being
+    dropped. Ingestion fails loudly (spec.md §6): a mistyped or moved path the
+    member approved at Gate 1 has to become a record and a `log.md` line, not a
+    source that quietly was never there. Arms turn it into a `failed` record
+    with `missing_reason(path)`.
     """
     found = []
     for source in paths:
@@ -265,6 +272,7 @@ def walk_sources(paths):
         if os.path.isfile(source):
             found.append((source, os.path.basename(source)))
             continue
+        before = len(found)
         for dirpath, dirnames, filenames in os.walk(source):
             dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
             for filename in sorted(filenames):
@@ -272,7 +280,16 @@ def walk_sources(paths):
                     continue
                 path = os.path.join(dirpath, filename)
                 found.append((path, os.path.relpath(path, source)))
+        if len(found) == before:
+            found.append((source, None))
     return found
+
+
+def missing_reason(path):
+    """Why a source path produced no candidate file at all."""
+    if not os.path.exists(path):
+        return "no such file or folder — nothing at this path to ingest"
+    return "the folder holds no files to ingest"
 
 
 def report(manifest, script, nothing, as_json=False, stdout=None, stderr=None):

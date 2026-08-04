@@ -1,6 +1,7 @@
 ---
 type: concept
 title: Hydration
+sources: [raw/bench-notes-2026-01.md]
 as_of: 2026-01-20
 volatility: slow
 canonical: the miller's current spec sheet for the flour in use

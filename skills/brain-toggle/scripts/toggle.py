@@ -52,6 +52,15 @@ class ToggleError(Exception):
     """Anything the member has to decide or fix before the operation can run."""
 
 
+class NeedsConsent(ToggleError):
+    """The diff has been shown and the member has not said yes yet.
+
+    Exit 3, like `AttachedElsewhere`: not a failure, a decision. The pointer arm
+    writes into a file the member authored, so the first block into one is shown
+    before it is written (spec.md §7).
+    """
+
+
 class AttachedElsewhere(ToggleError):
     """The brain is already attached somewhere else — move it or leave it.
 
@@ -337,7 +346,9 @@ def remove_pointer(path, slug):
     """Take the block for `slug` back out. Returns whether there was one.
 
     Removal is exact: the block, plus the one blank line that separated it
-    from the member's own text, and nothing else.
+    from the member's own text, and nothing else. A file that existed only
+    because the block was added to it is removed rather than left behind at
+    zero bytes — reversible means the harness sees what it saw before.
     """
     current = read_text(path)
     lines = current.split("\n")
@@ -347,8 +358,11 @@ def remove_pointer(path, slug):
     start, end = span
     if start > 0 and lines[start - 1] == "":
         start -= 1
-    remaining = lines[:start] + lines[end + 1:]
-    _write_text(path, "\n".join(remaining))
+    remaining = "\n".join(lines[:start] + lines[end + 1:])
+    if not remaining.strip():
+        os.remove(path)
+        return True
+    _write_text(path, remaining)
     return True
 
 
@@ -380,7 +394,7 @@ USAGE = """usage: toggle.py <command> [options]
   detach <slug>        remove that link
   list                 what is attached, and where
   resolve              print the skills directory an attach would use
-  pointer-add <file> <brain-dir>     append the pointer block
+  pointer-add <file> <brain-dir>     append the pointer block  [--yes past the first-use diff]
   pointer-remove <file> <slug>       take it back out
   pointer-diff <file> <brain-dir>    show the change without making it
 
@@ -398,12 +412,12 @@ def _parse(argv):
     # rather than shared: brain-toggle installs on its own, without the builder.
     positional = []
     options = {"--harness": "claude-code", "--scope": "global", "--cwd": None,
-               "--home": None, "--skills-dir": None, "--move": False}
+               "--home": None, "--skills-dir": None, "--move": False, "--yes": False}
     pending = iter(argv)
     for arg in pending:
         name, _, inline = arg.partition("=")
-        if name == "--move":
-            options["--move"] = True
+        if name in ("--move", "--yes"):
+            options[name] = True
         elif name in _FLAGS:
             value = inline if inline else next(pending, None)
             if not value:
@@ -489,11 +503,26 @@ def _cmd_list(positional, options):
 
 
 def _cmd_pointer_add(positional, options):
+    """Append the block — showing the diff first, the first time (spec.md §7).
+
+    The instruction file is the member's own, injected whole on every turn, and
+    the first write into one is the write they have not seen before. So the
+    first use prints the diff and stops at exit 3, the same "needs a decision"
+    code an ambiguous attach uses; `--yes` is the decision. Updating a block
+    that is already there, or a re-run that changes nothing, is silent.
+    """
     if len(positional) != 2:
         raise ToggleError("pointer-add takes an instruction file and a brain directory")
     path, brain = positional
+    slug = slug_of(brain)
+    if not options["--yes"] and not _pointer_span(read_text(path).split("\n"), slug):
+        check_brain(brain)
+        print(pointer_diff(path, slug, brain))
+        raise NeedsConsent(
+            "that is the first {} block {} would get — rerun with --yes to write it"
+            .format(slug, path))
     print("{} pointer block for {} in {}".format(
-        apply_pointer(path, slug_of(brain), brain), slug_of(brain), path))
+        apply_pointer(path, slug, brain), slug, path))
     return 0
 
 
@@ -545,6 +574,9 @@ def main(argv):
         sys.stderr.write(
             "toggle.py: {}\nrerun with --move to relocate it, or leave it "
             "global\n".format(decision))
+        return 3
+    except NeedsConsent as decision:
+        sys.stderr.write("toggle.py: {}\n".format(decision))
         return 3
     except ToggleError as failure:
         sys.stderr.write("toggle.py: {}\n".format(failure))

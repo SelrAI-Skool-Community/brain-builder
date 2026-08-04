@@ -1,6 +1,7 @@
 ---
 type: concept
 title: Shaping and proofing
+sources: [raw/bench-notes-2026-01.md]
 volatility: stable
 ---
 

@@ -218,6 +218,9 @@ def _navigation():
         "- `wiki/` has its own interior taxonomy. It is this brain's, not a fixed one.",
         "- **`raw/` is fenced**: immutable source material, excluded from the index, opened",
         "  only for a verbatim quote or an explicit question about provenance.",
+        "- **`quarantine/` is never opened at all.** If it exists, it holds material the",
+        "  rights stance refused to ingest — paywalled stubs kept only so the member can",
+        "  see what was skipped. It is not this brain's knowledge and is never quoted.",
     ])
 
 

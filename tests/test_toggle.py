@@ -440,10 +440,51 @@ class CommandLine(BrainOnDisk):
         with open(instructions, encoding="utf-8") as handle:
             self.assertEqual(original, handle.read())
 
-        self.assertEqual(0, self.run_cli("pointer-add", instructions, brain)[0])
+        self.assertEqual(0, self.run_cli("pointer-add", instructions, brain, "--yes")[0])
         self.assertEqual(0, self.run_cli("pointer-remove", instructions, "test-brain")[0])
         with open(instructions, encoding="utf-8") as handle:
             self.assertEqual(original, handle.read())
+
+    def test_the_first_block_into_a_file_shows_the_diff_and_waits(self):
+        """spec §7: the pointer arm shows the diff on first use.
+
+        The instruction file is the member's own and is injected whole on every
+        turn, so the first write into one is not made until they have seen it.
+        Exit 3 is "needs a decision", not a failure.
+        """
+        brain = self.minimal_brain()
+        instructions = os.path.join(self.tmp, "AGENTS.md")
+        original = "# Mine\n"
+        with open(instructions, "w", encoding="utf-8") as handle:
+            handle.write(original)
+
+        code, out, err = self.run_cli("pointer-add", instructions, brain)
+
+        self.assertEqual(3, code)
+        self.assertIn("+<!-- brain: test-brain -->", out)
+        self.assertIn("--yes", err)
+        with open(instructions, encoding="utf-8") as handle:
+            self.assertEqual(original, handle.read(), "nothing was written")
+
+    def test_updating_a_block_that_is_already_there_needs_no_second_consent(self):
+        """Only the *first* block is unseen; a re-point is a change to their yes."""
+        brain = self.minimal_brain()
+        instructions = os.path.join(self.tmp, "AGENTS.md")
+        self.assertEqual(0, self.run_cli("pointer-add", instructions, brain, "--yes")[0])
+
+        self.assertEqual(0, self.run_cli("pointer-add", instructions, brain)[0],
+                         "the block is already there — nothing unseen to show")
+
+    def test_a_file_created_only_for_the_block_does_not_survive_removal(self):
+        """Reversible means the harness sees what it saw before — not 0 bytes."""
+        brain = self.minimal_brain()
+        instructions = os.path.join(self.tmp, "GEMINI.md")
+
+        self.run_cli("pointer-add", instructions, brain, "--yes")
+        self.assertTrue(os.path.isfile(instructions))
+
+        self.assertEqual(0, self.run_cli("pointer-remove", instructions, "test-brain")[0])
+        self.assertFalse(os.path.exists(instructions))
 
     def test_an_unknown_command_is_a_usage_error(self):
         self.assertEqual(2, self.run_cli("frobnicate")[0])

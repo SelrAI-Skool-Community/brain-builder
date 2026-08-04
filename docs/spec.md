@@ -156,4 +156,19 @@ Carried as open fog on the planning map, deliberately not specified here:
 
 ---
 
-*Changelog: none — locked as written.*
+## Changelog
+
+Amendments after the lock, each one made because the build found the spec wrong
+rather than inconvenient. Nothing above is edited silently.
+
+- **2026-08-04 — §5 build phases: `ingest → taxonomy → pages → router → lint`.**
+  As locked, §5 read `… → lint → router`. The router is part of the brain and
+  `lint.py` checks it, so linting before generating it always fails on the
+  brain's own front door. Lint still *closes* the build, which is what that
+  ordering was protecting. (Found reviewing the landed build against §5.)
+- **2026-08-04 — §6 transcription engine: the API model id is `scribe_v1`.**
+  ElevenLabs' batch speech-to-text endpoint takes `scribe_v1` as its model id;
+  "Scribe v2" is the product name §6 locks on, and the price and WER quoted are
+  its numbers. The kit sends `scribe_v1` and exposes `ELEVENLABS_MODEL_ID` for
+  the day that changes. No behavioural difference — recorded so the divergence
+  between the spec's wording and the wire is not a surprise.

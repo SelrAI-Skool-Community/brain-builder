@@ -77,7 +77,11 @@ _RANGE = re.compile(
         n=_NUMBER), re.IGNORECASE)
 
 _FIGURE = re.compile(r"(?P<currency>[$£€])?\s?(?P<value>{n})".format(n=_NUMBER))
-_UNIT_FOLLOWS = re.compile(r"\s*(%|per\s?cent|[A-Za-z°])")
+#: What counts as a figure's scale following it. The optional hyphen matters:
+#: "120-loaf threshold", "500-word article", "3-day retard" are the *scaled*
+#: form this check exists to reward, and flagging them trains a build to ignore
+#: the whole warning class.
+_UNIT_FOLLOWS = re.compile(r"\s*[-–—]?\s*(%|per\s?cent|[A-Za-z°])")
 
 _SCALES = {"thousand": 1e3, "k": 1e3, "million": 1e6, "m": 1e6,
            "billion": 1e9, "bn": 1e9}
@@ -180,7 +184,7 @@ def verify_brain(brain, log=False):
             findings += _check_provenance(page, relpath)
     report = Report(brain, pages, findings)
     if log and os.path.isfile(os.path.join(brain, "log.md")):
-        log_event(brain, "verify: " + report.summary())
+        log_event(brain, "verify: " + report.summary(), once=True)
     return report
 
 

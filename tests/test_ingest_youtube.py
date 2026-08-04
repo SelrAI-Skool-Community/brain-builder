@@ -28,11 +28,13 @@ class FakeDownloader(object):
         self.listings = listings or {}
         self.captions_by_id = captions or {}
         self.audio_by_id = audio or {}
+        self.listings_asked = []
         self.captions_asked = []
         self.audio_asked = []
         self.update_note = "yt-dlp 2026.08.01 (up to date)"
 
     def videos(self, target, limit=None):
+        self.listings_asked.append(target)
         found = self.listings.get(target, [])
         return found[:limit] if limit else found
 
@@ -129,6 +131,46 @@ class Captions(YouTubeArm):
         manifest = self.ingest(downloader)
         self.assertEqual(1, len(manifest.ok))
         self.assertIn("429", manifest.failed[0].reason)
+
+
+class WhatThisArmWillFetch(YouTubeArm):
+    """yt-dlp reads far more than YouTube, and the deferred list has to bind.
+
+    Without a guard, the §6 deferred platforms are enforced by nothing but the
+    model's good manners, and a Spotify URL reaches yt-dlp's generic extractor
+    — which is a rights failure (`rights.py`: DRM hosts are *never fetched*),
+    not merely a scope one.
+    """
+
+    def refusals(self, target):
+        downloader = self.downloader([video("a")], target=target)
+        manifest = self.ingest(downloader, target=target)
+        return downloader, manifest
+
+    def test_a_deferred_platform_is_named_and_never_fetched(self):
+        downloader, manifest = self.refusals("https://www.tiktok.com/@x/video/1")
+
+        self.assertEqual([], downloader.listings_asked, "nothing was fetched")
+        self.assertEqual(1, len(manifest.unsupported))
+        self.assertIn("not a v1 source", manifest.unsupported[0].reason)
+        self.assertTrue(manifest.whole_corpus_failed)
+
+    def test_a_drm_host_gets_the_rights_refusal_not_the_scope_one(self):
+        downloader, manifest = self.refusals("https://open.spotify.com/show/abc")
+
+        self.assertEqual([], downloader.listings_asked)
+        self.assertIn("DRM", manifest.unsupported[0].reason)
+        self.assertIn("RSS", manifest.unsupported[0].reason)
+
+    def test_youtube_urls_and_bare_searches_still_go_straight_through(self):
+        for target in ("https://www.youtube.com/@channel", "https://youtu.be/abc",
+                       "sourdough hydration"):
+            with self.subTest(target=target):
+                self.assertIsNone(ingest_youtube.target_refusal(target))
+
+    def test_a_refused_target_is_named_in_the_log(self):
+        self.refusals("https://www.instagram.com/reel/x/")
+        self.assertIn("instagram.com", self.log())
 
 
 class EmptyTranscripts(YouTubeArm):

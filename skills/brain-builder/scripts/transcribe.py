@@ -110,10 +110,15 @@ class TranscriptionError(Exception):
 class Estimate(object):
     """What transcribing this build would cost, in the shape Gate 2 states it."""
 
-    def __init__(self, engine, seconds, items):
+    def __init__(self, engine, seconds, items, untimed=0):
         self.engine = engine
         self.seconds = seconds
         self.items = items
+        #: Items that will be transcribed and billed but state no duration, so
+        #: they contribute nothing to `seconds`. Counted rather than dropped:
+        #: "none, $0" for a corpus that is about to be billed is the one lie
+        #: this gate cannot afford (spec.md §6 — cost surfaces once, here).
+        self.untimed = untimed
 
     @property
     def hours(self):
@@ -126,18 +131,32 @@ class Estimate(object):
     def line(self):
         """The Gate 2 sentence. Said even when it is free, because that is the
         line that stops a surprise on the arms that do transcribe."""
-        if not self.seconds:
+        if not self.items:
             return "Transcription — none, $0."
         caution = " ({})".format(self.engine.caution) if self.engine.caution else ""
-        return ("Transcription — {items} source{plural}, {hours:g} hours via {label}"
+        if not self.seconds:
+            return ("Transcription — {items} source{plural} via {label}{caution} at "
+                    "${rate:.2f}/hr, and not one of them states a duration, so there "
+                    "is no figure to give here.").format(
+                        items=self.items, plural="" if self.items == 1 else "s",
+                        label=self.engine.label, caution=caution,
+                        rate=self.engine.price_per_hour)
+        line = ("Transcription — {items} source{plural}, {hours:g} hours via {label}"
                 "{caution}, about ${cost:.2f} one-off at ${rate:.2f}/hr.").format(
                     items=self.items, plural="" if self.items == 1 else "s",
                     hours=self.hours, label=self.engine.label, caution=caution,
                     cost=self.cost, rate=self.engine.price_per_hour)
+        if self.untimed:
+            line += (" {} states no duration and is not in that figure."
+                     if self.untimed == 1 else
+                     " {} state no duration and are not in that figure.").format(
+                         _plural(self.untimed, "source"))
+        return line
 
     def as_dict(self):
         return {"engine": self.engine.name, "items": self.items,
-                "hours": self.hours, "cost": self.cost, "line": self.line()}
+                "hours": self.hours, "cost": self.cost, "untimed": self.untimed,
+                "line": self.line()}
 
 
 class Quote(object):
@@ -168,7 +187,7 @@ class Quote(object):
 
     def line(self):
         parts = [self.estimate.line()]
-        if self.ceiling and self.estimate.seconds:
+        if self.ceiling and self.estimate.items:
             parts.append("That is the ceiling — anything that turns out to carry a "
                          "transcript already costs nothing.")
         if self.unpriced:
@@ -196,9 +215,15 @@ def engine_for(name):
 
 
 def estimate(durations, engine=DEFAULT_ENGINE):
-    """What transcribing these durations would cost, for the plan gate."""
+    """What transcribing these durations would cost, for the plan gate.
+
+    A duration that does not parse is worth zero seconds but still counts as an
+    item to be transcribed — and is counted separately, so the gate can say the
+    figure is short rather than quoting it as if it were whole.
+    """
     seconds = [parse_duration(duration) for duration in durations]
-    return Estimate(engine_for(engine), sum(seconds), len(seconds))
+    return Estimate(engine_for(engine), sum(seconds), len(seconds),
+                    untimed=sum(1 for value in seconds if not value))
 
 
 def parse_duration(value):

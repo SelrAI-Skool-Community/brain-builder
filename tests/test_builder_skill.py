@@ -53,7 +53,22 @@ class SkillWiring(unittest.TestCase):
     """Every path and command the skill tells the model to use has to exist."""
 
     def scripts_named(self):
-        return set(re.findall(r"scripts/(\w+\.py)", skill_text()))
+        """Every script the skill tells the model to run.
+
+        Commands are written `python3 "$KIT/<script>"` because the member's
+        working directory is not the skill directory — a bare `scripts/x.py`
+        is a `No such file or directory` in every real session.
+        """
+        return set(re.findall(r"(?:\$KIT|scripts)/(\w+\.py)", skill_text()))
+
+    def test_no_command_is_written_relative_to_the_working_directory(self):
+        """`python3 scripts/x.py` only works from inside the clone.
+
+        The skill is installed by symlink and runs with the member's project as
+        cwd, so a repo-relative command in it is a command that always fails.
+        """
+        self.assertNotIn("python3 scripts/", skill_text())
+        self.assertIn("KIT=", skill_text(), "the skill has to resolve its own directory")
 
     def test_every_script_the_skill_calls_is_shipped_next_to_it(self):
         named = self.scripts_named()

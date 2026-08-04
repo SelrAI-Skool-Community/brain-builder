@@ -151,7 +151,7 @@ def scan(brain, threshold=DEFAULT_THRESHOLD, log=False):
     pages = read_raw(brain)
     report = Report(brain, len(pages), find_near_duplicates(pages, threshold))
     if log and os.path.isfile(os.path.join(brain, "log.md")):
-        log_event(brain, "dedup: " + report.summary())
+        log_event(brain, "dedup: " + report.summary(), once=True)
     return report
 
 

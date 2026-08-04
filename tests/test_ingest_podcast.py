@@ -170,8 +170,9 @@ class FeedParsing(unittest.TestCase):
             "https://feeds.example.com/breadshow.xml": (feed, "application/rss+xml"),
             "https://cdn.example.com/ep1.vtt": (TRANSCRIPT_VTT, "text/vtt")})
         episode = ingest_podcast.parse_feed(feed).episodes[0]
-        self.assertIn("Hydration is the ratio",
-                      ingest_podcast._published_transcript(episode, fetcher))
+        text, note = ingest_podcast._published_transcript(episode, fetcher)
+        self.assertIn("Hydration is the ratio", text)
+        self.assertEqual("", note)
 
     def test_an_episode_with_nothing_to_attribute_it_to_falls_back_to_the_feed(self):
         episode = ingest_podcast.Episode(feed_url="https://feeds.example.com/x.xml")
@@ -253,6 +254,43 @@ class PublishedTranscripts(PodcastArm):
     def test_every_episode_without_words_is_named_in_the_log(self):
         self.ingest(self.fetcher())
         self.assertIn("Episode 2", self.log())
+
+    def test_a_dead_transcript_says_so_rather_than_no_published_transcript(self):
+        """The fall-through is right; erasing what happened is not.
+
+        An episode that published a transcript and served a 404 is a different
+        thing from one that never published one, and the log loses the only
+        fact worth acting on if both read the same.
+        """
+        reasons = [record.reason for record in self.ingest(self.fetcher()).empty]
+
+        self.assertTrue(any("could not be fetched" in reason for reason in reasons),
+                        reasons)
+        self.assertTrue(any("no published transcript" in reason for reason in reasons),
+                        reasons)
+
+    def test_a_walled_transcript_page_is_quarantined_not_ingested(self):
+        """The web arm is not the only place a paywall reaches the kit."""
+        walled = "Subscribe to continue reading this transcript. " * 5
+        manifest = self.ingest(self.fetcher(**{
+            "https://cdn.example.com/ep1.vtt": (walled, "text/html")}))
+
+        self.assertEqual(0, len(manifest.ok))
+        self.assertTrue(any("paywalled" in record.reason for record in manifest.empty),
+                        [record.reason for record in manifest.empty])
+        self.assertTrue(os.path.isdir(os.path.join(self.brain, "quarantine")))
+        self.assertEqual([], self.raw_pages(), "nothing walled reaches raw/")
+
+    def test_a_feed_that_lists_no_episodes_is_a_named_failure(self):
+        """"0 sources ingested" with no record is the silent skip §6 forbids."""
+        empty_feed = ('<?xml version="1.0"?><rss version="2.0"><channel>'
+                      "<title>Nothing Here</title></channel></rss>")
+
+        manifest = self.ingest(self.fetcher(feed=empty_feed))
+
+        self.assertEqual(1, len(manifest.failed))
+        self.assertIn("no episodes", manifest.failed[0].reason)
+        self.assertTrue(manifest.whole_corpus_failed)
 
 
 class TranscriptionFallback(PodcastArm):

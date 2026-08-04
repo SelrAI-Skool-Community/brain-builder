@@ -25,10 +25,11 @@ paste-in prompt is a complete invocation — if the opening message already tell
 you what the brain is about, what it is built from, where the material lives and
 what the member wants to ask it, **ask nothing** and go straight to Gate 1.
 
-**The v1 ingestion arm is local files** — `.md`, `.txt`, `.csv`, `.json`,
-`.docx`. YouTube, PDFs, web articles and podcasts land in a later arm. When a
-member names one of those, say so in a line and offer what works today: anything
-they have already exported or downloaded into a folder.
+**One arm per source family**, and every one of them returns the same manifest:
+local files, PDFs and EPUBs, YouTube, web articles, and podcasts (Apple
+Podcasts or any RSS feed). Instagram, TikTok, X, LinkedIn and Spotify's own
+player are out of v1 — when a member names one, say so in a line and offer what
+does work: an export, a download, or the show's RSS feed.
 
 ## What you are building
 
@@ -46,13 +47,21 @@ Zero infrastructure: no RAG, no embeddings, no database, no server. Files only.
 Retrieval is an agent starting at `index.md` and following links.
 
 The scripts below sit next to this file. Run them by their path in this skill
-directory — they are stdlib-only Python 3, no install step:
+directory — stdlib-only Python 3 except the ingestion readers, which each import
+their own library and name the `pip install` line if it is missing:
 
 | Step | Call |
 |---|---|
 | List the kinds on offer | `python3 scripts/scaffold.py --list-blueprints` |
 | Stand the brain up | `python3 scripts/scaffold.py --title "…" --domain "…" --kind subject [--slug …] [--at ~/brains]` |
 | Ingest local files | `python3 scripts/ingest_local.py <paths…> --into <brain> --json` |
+| Ingest PDFs / EPUBs | `python3 scripts/ingest_docs.py <paths…> --into <brain> --json` |
+| Ingest YouTube | `python3 scripts/ingest_youtube.py <url-or-search…> --into <brain> [--limit N] [--transcribe] --json` |
+| Ingest web articles | `python3 scripts/ingest_web.py <urls…> --into <brain> --json` |
+| Ingest podcasts | `python3 scripts/ingest_podcast.py <apple-url\|rss-url\|"show name"…> --into <brain> [--limit N] [--transcribe] --json` |
+| Price transcription (Gate 2) | `python3 scripts/ingest_podcast.py --estimate <show…>` · `python3 scripts/ingest_youtube.py --estimate <url…>` · `python3 scripts/transcribe.py --estimate <seconds…>` |
+| Find sources that repeat each other | `python3 scripts/dedup_corpus.py <brain> --json` |
+| Check the figures | `python3 scripts/verify_numbers.py <brain>` |
 | Generate the router | `python3 scripts/gen_router.py <brain>` |
 | Lint (last — it checks the router too) | `python3 scripts/lint.py <brain>` |
 
@@ -119,14 +128,15 @@ each**:
 ```
 Local files — 34
   ~/Documents/baking/notes/     18 md   your own bench notes, the numbers live here
-  ~/Documents/baking/refs/      12 pdf  not readable by this arm yet — see below
+  ~/Documents/baking/refs/      12 pdf  the reference books, read by the docs arm
   ~/Downloads/starter-log.csv    1 csv  the feeding log, 14 months of timings
 ```
 
 Then: *"Anything to add or drop?"* This gate is **edited by talking** — the
 member says "drop the PDFs, add my Obsidian vault" and you redraw the list. Loop
-until they approve. Say plainly what this arm cannot read rather than quietly
-dropping it.
+until they approve. Say plainly what no arm can read rather than quietly
+dropping it — DRM'd books and Spotify-exclusive shows have no way in, and that
+is a line at this gate, not a surprise at the end.
 
 ## Gate 2 — the plan gate
 
@@ -136,38 +146,70 @@ One message, four facts, then one approval:
 - **Where it lands** — stated, never asked: "→ `~/brains/sourdough-baking/`".
   If the member changes it in passing, take the change and carry on.
 - **Source count** — what will actually be ingested.
-- **Transcription** — hours and cost. For local files this is **none, $0**; say
-  it anyway, because it is the line that stops a surprise on the arms that do
-  transcribe.
+- **Transcription** — hours and cost, from the estimator, **once**. Never quote
+  a figure you worked out in your head, and never mention money again after this
+  gate:
+
+  ```bash
+  python3 scripts/ingest_podcast.py --estimate <show…>   # prices the feed
+  python3 scripts/ingest_youtube.py --estimate <url…>    # the ceiling for video
+  python3 scripts/transcribe.py --estimate <seconds…>    # prices anything else
+  ```
+
+  For local files, documents and web articles this is **none, $0** — say it
+  anyway, because it is the line that stops a surprise on the arms that do
+  transcribe. A feed says which episodes ship transcripts, so its figure is the
+  bill; YouTube does not, so its figure is a ceiling and is quoted as one.
+  A cheaper engine exists (`--engine groq`) at roughly a fifth the price, for
+  **rough indexing only** — its pages are marked never-quote. Do not offer it
+  unless the member raises cost; never make it the default.
 
 Get **one** approval and then build. No further questions during the build: if
-something needs a decision mid-build, make it and note it in the report.
+something needs a decision mid-build, make it and note it in the report. The
+approval at this gate is what authorises `--transcribe` on the arms that take
+it; without it they record a caption-less source rather than spending money.
 
 ## Phase 3 — Build
 
 Narrate at **phase level with counts** — one line per phase, never file by file,
 never a running commentary. Five phases:
 
-**Ingest.**
+**Ingest — one arm per source family, then one dedup pass.**
 
 ```bash
 python3 scripts/scaffold.py --title "<title>" --domain "<one line>" --kind <kind>
-python3 scripts/ingest_local.py <paths…> --into <brain> --json
+python3 scripts/ingest_local.py <paths…>   --into <brain> --json   # md/txt/csv/json/docx
+python3 scripts/ingest_docs.py <paths…>    --into <brain> --json   # pdf/epub
+python3 scripts/ingest_youtube.py <urls…>  --into <brain> --json   # channels, playlists, searches
+python3 scripts/ingest_web.py <urls…>      --into <brain> --json   # articles
+python3 scripts/ingest_podcast.py <shows…> --into <brain> --json   # Apple Podcasts or any RSS
+python3 scripts/dedup_corpus.py <brain> --json                     # after every arm has run
 ```
 
 `scaffold.py` writes the skeleton and — importantly — the `index.md` frontmatter
-the router generator reads, including the stance taken from the blueprint.
-`ingest_local.py` returns counts and never raises: dead, empty, duplicate and
-unreadable files are recorded in the manifest and appended to `log.md`, and the
-build carries on. Re-running it after a Gate 1 edit adds material rather than
-overwriting any — `raw/` is immutable.
+the router generator reads, including the stance taken from the blueprint. Route
+each group from Gate 1 to its arm and run only the arms that have sources; add
+`--transcribe` only where Gate 2 priced it.
 
-It exits non-zero only when **nothing** came out of the corpus; that is the
-single condition that stops a build. A folder whose files this arm cannot read —
-all PDFs, say — counts as exactly that. Stop, say which arm it needs, and talk to
-the member. Never build an empty brain.
+Every arm behaves the same way, which is what makes them safe to run in a row:
+counts out, never an exception, and dead, empty, duplicate, unreadable and
+refused sources recorded in the manifest and appended to `log.md`. Re-running
+after a Gate 1 edit adds material rather than overwriting any — `raw/` is
+immutable, and YouTube keeps an archive so a re-run does not re-fetch.
 
-> `↳ Ingested 34 sources (128,400 words) — 2 empty, 1 duplicate.`
+**Fail loudly, in this order.** Publisher transcript → transcription fallback →
+a named record. A video with poisoned captions, a paywalled article, a
+DRM-refused book and a Spotify exclusive all end up in `log.md` by name. None of
+them is ever silently skipped, and none of them is worked around.
+
+An arm exits non-zero only when **nothing** came out of what it was given; that
+is the single condition that stops a build. Stop, say which arm it needs or what
+the corpus was, and talk to the member. Never build an empty brain.
+
+**Close the phase with one line** covering every arm together, and let `log.md`
+hold the detail:
+
+> `↳ Ingested 86 sources (412,900 words) — 3 empty, 2 duplicate, 1 paywalled (quarantined); 2 sources restate others.`
 
 **Taxonomy — one shared pass, before any page is written.** Read across the
 whole of `raw/` and decide the concept map for the brain in one pass: the pages,
@@ -177,11 +219,17 @@ overlaps in some places and dangles in others. Fix the map first; then fill it.
 
 > `↳ Taxonomy: 11 concepts across 3 clusters.`
 
+Use `dedup_corpus.py`'s pairs here: where one source restates another, distil
+the claim **once** and cite the original. Four `raw/` pages saying the same
+thing is a compilation, not four sources agreeing.
+
 **Pages.** Write `wiki/` from the agreed map — this is where parallel section
 agents earn their keep, one agent per cluster, each working to the shared map.
 Every page: OKF frontmatter with a `type`, the sources it was distilled from,
-the answer first, and **numbers kept exact with their context**. Never invent a
-fact to fill a page; a thin page is honest, a padded one is not.
+the answer first, and **numbers kept exact with their context** — a figure keeps
+its unit, its denominator and its date, because a number that lost its scale is
+not citable however well it is sourced. Never invent a fact to fill a page; a
+thin page is honest, a padded one is not.
 
 > `↳ Pages: 11 written, 38 cross-links.`
 
@@ -215,9 +263,13 @@ Two passes close every build:
 1. **Lint** — until it exits 0, regenerating the router after any fix. Dangling
    links cluster on exactly the concepts people reach for most, so they matter
    more than they look.
-2. **Number verification** — spot-check the figures that made it into `index.md`
-   and the most-cited pages against `raw/`. A number that cannot be traced back
-   comes out of the brain; it does not get softened into a vague claim.
+2. **Number verification** — `python3 scripts/verify_numbers.py <brain>`, which
+   catches figures their own sentence contradicts, spoken numbers the digits
+   disagree with, and figures that lost their unit. Errors exit 1; fix them
+   against `raw/` before the brain ships. Then spot-check by hand what a script
+   cannot: the figures in `index.md` and the most-cited pages, traced back to
+   the source. **A number that cannot be traced back comes out of the brain**;
+   it does not get softened into a vague claim.
 
 **Whatever is left over becomes `## Known gaps` in `index.md`, not a build
 error.** Thin areas, sources that failed, intake questions the corpus turned out
@@ -246,8 +298,12 @@ seen it work.
 - **Fail loudly, never silently.** A source that could not be read is named in
   the log and counted in the summary. Never quietly skip.
 - **Rights**: build only from material the member lawfully has, on their machine.
-  Never remove DRM, never work around a paywall, attribute every chunk. The
-  attribution is automatic — `raw/` pages carry their source path and ingest
-  date. Do not lecture the member about any of this mid-build.
+  Never remove DRM, never work around a paywall, attribute every chunk. All
+  three are enforced in the arms, not by you — DRM'd files and DRM'd players are
+  refused, paywalled extractions are quarantined outside `raw/`, and every
+  `raw/` page carries its source and ingest date automatically. So say a refusal
+  once, in a line, when it happens, and **never lecture the member, never ask
+  them to confirm they have read a policy, and never raise the subject
+  unprompted.**
 - **`raw/` is immutable.** Ingested material is never edited, only distilled.
 - **Built brains are never redistributed** — members rebuild from a prompt.

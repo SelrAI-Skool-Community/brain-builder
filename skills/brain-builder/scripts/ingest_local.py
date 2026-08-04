@@ -13,130 +13,35 @@ carries on — one dead file has never been a reason to abandon a corpus. The on
 exception is a corpus that yielded *nothing*, which exits non-zero so the build
 stops rather than producing an empty brain. A folder of file types this arm
 cannot read counts as exactly that: pointing the builder at a folder of PDFs is
-the likeliest way to reach it, and silently building an empty brain would be the
-worst possible answer.
+the likeliest way to reach it, and `ingest_docs.py` is the arm it needs.
 
 Dedup here is **exact**: identical text, whitespace-normalised. Near-verbatim
-dedup (spec.md §6) is a transcript problem — compilations restating other
-episodes — and belongs to the arms that ingest transcripts, not to this one.
+dedup (spec.md §6) is a corpus-wide question — a compilation restating three
+other sources — and belongs to `dedup_corpus.py`, which sees the whole of
+`raw/` at once rather than one file at a time.
 
-`raw/` is immutable, so a second run never overwrites a page a first run wrote:
-what is already in `raw/` is read back, and a source already ingested comes out
-as a duplicate rather than a clobbered file.
+The manifest, the provenance header and the immutable `raw/` are shared with
+every other arm and live in `raw_store.py`.
 
 Stdlib only: `.docx` is a zip of XML, which `zipfile` and `ElementTree` read
 without a third-party library.
 """
 import csv
-import datetime
-import hashlib
 import io
 import json
 import os
-import re
 import sys
 import zipfile
 import xml.etree.ElementTree as ElementTree
 
 import cli
-from brain_contract import parse_frontmatter
-from scaffold import derive_slug, log_event
+from raw_store import (Manifest, RawStore, Record, log_manifest, report,
+                       walk_sources)
 
 TEXT_FORMATS = {".md": "md", ".markdown": "md", ".txt": "txt", ".text": "txt"}
 SUPPORTED = dict(TEXT_FORMATS, **{".csv": "csv", ".json": "json", ".docx": "docx"})
 
 WORD_NAMESPACE = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-
-
-class Record(object):
-    """One source file and what became of it."""
-
-    def __init__(self, source, outcome, raw=None, words=0, source_format=None, reason=""):
-        self.source = source
-        self.outcome = outcome
-        self.raw = raw
-        self.words = words
-        self.source_format = source_format
-        self.reason = reason
-
-    def as_dict(self):
-        return {"source": self.source, "outcome": self.outcome, "raw": self.raw,
-                "words": self.words, "format": self.source_format, "reason": self.reason}
-
-
-class Manifest(object):
-    """The whole run: what landed, what did not, and the line to narrate."""
-
-    #: Everything that can become of a source file. `ok` is the one that lands.
-    OUTCOMES = ("ok", "empty", "duplicate", "unsupported", "failed")
-
-    def __init__(self, brain):
-        self.brain = brain
-        self.records = []
-
-    def add(self, record):
-        self.records.append(record)
-        return record
-
-    def of(self, outcome):
-        """Every record with `outcome` — see `OUTCOMES` for the five."""
-        return [record for record in self.records if record.outcome == outcome]
-
-    @property
-    def ok(self):
-        return self.of("ok")
-
-    @property
-    def empty(self):
-        return self.of("empty")
-
-    @property
-    def duplicate(self):
-        return self.of("duplicate")
-
-    @property
-    def unsupported(self):
-        return self.of("unsupported")
-
-    @property
-    def failed(self):
-        return self.of("failed")
-
-    @property
-    def words(self):
-        return sum(record.words for record in self.ok)
-
-    @property
-    def counts(self):
-        counts = {outcome: len(self.of(outcome)) for outcome in self.OUTCOMES}
-        counts["words"] = self.words
-        return counts
-
-    @property
-    def whole_corpus_failed(self):
-        """Files were found and none of their text is in the brain.
-
-        The only condition that stops a build. Unsupported files count towards
-        it: a folder this arm cannot read is still a corpus that produced
-        nothing, and the honest answer is to stop and say which arm it needs.
-        Duplicates do not — their text is already in `raw/`, which is the whole
-        point of re-running after a Gate 1 edit.
-        """
-        return bool(self.records) and not self.ok and not self.duplicate
-
-    def summary(self):
-        """The one line the build narrates, and the one line the log keeps."""
-        parts = ["{} sources ingested ({:,} words)".format(len(self.ok), self.words)]
-        for outcome in self.OUTCOMES[1:]:
-            found = self.of(outcome)
-            if found:
-                parts.append("{} {}".format(len(found), outcome))
-        return ", ".join(parts)
-
-    def as_dict(self):
-        return {"brain": self.brain, "counts": self.counts,
-                "summary": self.summary(),
-                "records": [record.as_dict() for record in self.records]}
 
 
 def ingest(sources, brain):
@@ -147,41 +52,16 @@ def ingest(sources, brain):
     brain that already holds material adds to it — `raw/` is immutable, and
     nothing already ingested is rewritten.
     """
-    brain = os.path.abspath(os.path.expanduser(brain))
-    raw_dir = os.path.join(brain, "raw")
-    os.makedirs(raw_dir, exist_ok=True)
+    store = RawStore(brain)
+    manifest = Manifest(store.brain)
+    for path, relpath in walk_sources(sources):
+        _ingest_one(path, relpath, store, manifest)
 
-    manifest = Manifest(brain)
-    used_names, seen_text = _already_ingested(raw_dir)
-    for path, relpath in _walk(sources):
-        _ingest_one(path, relpath, raw_dir, manifest, seen_text, used_names)
-
-    _log_manifest(brain, manifest)
+    log_manifest(store.brain, manifest)
     return manifest
 
 
-def _already_ingested(raw_dir):
-    """What a previous run left in `raw/`: the names taken and the text held.
-
-    Read back rather than assumed, so a Gate 1 edit that adds a folder and
-    re-runs cannot overwrite a page — `raw/` is immutable (spec.md §2).
-    """
-    used_names, seen_text = set(), {}
-    for name in sorted(os.listdir(raw_dir)):
-        if not name.endswith(".md"):
-            continue
-        used_names.add(name)
-        with open(os.path.join(raw_dir, name), "r", encoding="utf-8") as handle:
-            front, body, _ = parse_frontmatter(handle.read())
-        seen_text[_digest(body)] = front.get("source") or "raw/" + name
-    return used_names, seen_text
-
-
-def _digest(text):
-    return hashlib.sha256(re.sub(r"\s+", " ", text).strip().encode("utf-8")).hexdigest()
-
-
-def _ingest_one(path, relpath, raw_dir, manifest, seen_text, used_names):
+def _ingest_one(path, relpath, store, manifest):
     source_format = SUPPORTED.get(os.path.splitext(path)[1].lower())
     if source_format is None:
         return manifest.add(Record(path, "unsupported", reason="no reader for this file type"))
@@ -195,17 +75,12 @@ def _ingest_one(path, relpath, raw_dir, manifest, seen_text, used_names):
         return manifest.add(Record(path, "empty", source_format=source_format,
                                    reason="no text in the file"))
 
-    digest = _digest(text)
-    if digest in seen_text:
+    already = store.duplicate_of(text)
+    if already:
         return manifest.add(Record(path, "duplicate", source_format=source_format,
-                                   reason="same text as {}".format(seen_text[digest])))
-    seen_text[digest] = path
+                                   reason="same text as {}".format(already)))
 
-    name = _raw_name(relpath, used_names)
-    with open(os.path.join(raw_dir, name), "w", encoding="utf-8") as handle:
-        handle.write(_raw_page(path, source_format, text))
-    return manifest.add(Record(path, "ok", raw="raw/" + name, words=len(text.split()),
-                               source_format=source_format))
+    return store.land(manifest, text, os.path.splitext(relpath)[0], path, source_format)
 
 
 def extract(path, source_format):
@@ -265,58 +140,6 @@ def _extract_json(text):
                                                 ensure_ascii=False, sort_keys=False))
 
 
-def _walk(sources):
-    """Every candidate file under `sources`, with the name it will be filed as."""
-    found = []
-    for source in sources:
-        source = os.path.abspath(os.path.expanduser(source))
-        if os.path.isfile(source):
-            found.append((source, os.path.basename(source)))
-            continue
-        for dirpath, dirnames, filenames in os.walk(source):
-            dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
-            for filename in sorted(filenames):
-                if filename.startswith(".") or filename.startswith("~$"):
-                    continue
-                path = os.path.join(dirpath, filename)
-                found.append((path, os.path.relpath(path, source)))
-    return found
-
-
-def _raw_name(relpath, used_names):
-    """The `raw/` filename for a source, kept unique across the whole corpus."""
-    stem = derive_slug(os.path.splitext(relpath)[0]) or "source"
-    name, suffix = stem + ".md", 2
-    while name in used_names:
-        name, suffix = "{}-{}.md".format(stem, suffix), suffix + 1
-    used_names.add(name)
-    return name
-
-
-def _raw_page(path, source_format, text):
-    return ("---\n"
-            "type: source\n"
-            "source: {source}\n"
-            "source_format: {source_format}\n"
-            "ingested: {today}\n"
-            "---\n\n"
-            "{text}\n").format(source=path, source_format=source_format,
-                               today=datetime.date.today().isoformat(),
-                               text=text.strip())
-
-
-def _log_manifest(brain, manifest):
-    """Write the run's counts and every non-landing source into `log.md`."""
-    if not os.path.isfile(os.path.join(brain, "log.md")):
-        return
-    log_event(brain, "ingest: " + manifest.summary())
-    for record in manifest.records:
-        if record.outcome in ("ok", "duplicate"):
-            continue
-        log_event(brain, "ingest {}: {} — {}".format(
-            record.outcome, record.source, record.reason))
-
-
 # --- cli -------------------------------------------------------------------
 
 USAGE = "usage: ingest_local.py <path> [<path> ...] --into <brain-dir> [--json]\n"
@@ -334,14 +157,8 @@ def main(argv):
         sys.stderr.write(USAGE)
         return 2
 
-    manifest = ingest(paths, options["--into"])
-    print(json.dumps(manifest.as_dict(), indent=2)
-          if options["--json"] else manifest.summary())
-    if manifest.whole_corpus_failed:
-        sys.stderr.write("ingest_local.py: nothing could be read — stop and talk to "
-                         "the member rather than building an empty brain\n")
-        return 1
-    return 0
+    return report(ingest(paths, options["--into"]), "ingest_local.py",
+                  "nothing could be read", as_json=options["--json"])
 
 
 if __name__ == "__main__":

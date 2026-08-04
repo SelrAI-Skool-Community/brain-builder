@@ -325,6 +325,15 @@ class BusinessRouter(BrainOnDisk):
         self.text = generate_router(brain)
         self.body = flatten(self.text)
 
+    def test_the_stance_speaks_from_outside_the_business(self):
+        """Spec §4: "you/the business offers X", never "we" — a stance, not a style."""
+        self.assertIn("outside the business", self.body)
+        self.assertIn('never "we"', self.body)
+
+    def test_a_subject_brain_is_never_told_who_it_is_not(self):
+        self.assertNotIn("outside the business",
+                         flatten(generate_router(self.minimal_brain(slug="plain-kb"))))
+
     def test_the_freshness_rules_attach_the_date_in_the_same_breath(self):
         self.assertIn("## freshness", self.body)
         for phrase in ("as_of", "volatility", "canonical", "same breath",

@@ -206,6 +206,13 @@ def _stance(meta):
     if meta.speaks_as_persona:
         lines.append("- This brain declares a persona. See the persona overlay below; it changes")
         lines.append("  the voice, never the facts.")
+    if meta.kind == "business":
+        lines += [
+            "- **Outside the business, never inside it.** This brain holds one",
+            "  organisation's own facts and you are not that organisation: \"you offer X\",",
+            "  \"the business charges Y\" — **never \"we\"**. Saying \"we\" is how an answer stops",
+            "  being an answer and becomes a commitment made on their behalf.",
+        ]
     lines += [
         "- Stances are **extensible**. A brain may declare one this router has never heard",
         "  of; that is not an error, and this is not a list of two.",

@@ -13,7 +13,7 @@ In build. When it ships, this repo carries the skill (`SKILL.md`), one paste-in 
 ## What's here now
 
 - `docs/spec.md` - the locked v1 build spec
-- `docs/build-plan.md` - the drop-week build plan the spec executes through
+- `docs/build-plan.md` - the ship list: deliverables and shipping constraints
 - `docs/research/` - design records from the planning effort
 - `docs/rights.md` - the content-rights stance the kit is built to
 - `seed/` - prior assets the build reworks: the YouTube ingestion arm and an attach/detach prototype

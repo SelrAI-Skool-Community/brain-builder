@@ -1,6 +1,6 @@
 # Brain Builder — v1 build spec
 
-**Status: locked.** This document folds every decision from the planning effort (the "Claude Brains Kit" wayfinder map, Selr Linear CORE-121) into one build spec. It locks on merge; amendments after that get a changelog entry at the bottom, not silent edits. The companion [build-plan.md](build-plan.md) sizes the build to land inside drop week.
+**Status: locked.** This document folds every decision from the planning effort (the "Claude Brains Kit" wayfinder map, Selr Linear CORE-121) into one build spec. It locks on merge; amendments after that get a changelog entry at the bottom, not silent edits. The companion [build-plan.md](build-plan.md) lists what has to exist to ship and the shipping constraints — no schedule.
 
 Linear references (CORE-nnn) are provenance for the Selr team; the substance is all here.
 

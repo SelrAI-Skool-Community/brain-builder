@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a brain's `SKILL.md` router (spec.md §3).
 
-    python3 gen_router.py <brain-dir> [--kind <kind>]
+    python3 gen_router.py <brain-dir> [--kind <kind>] [--root <path>]
 
 The router is the brain's entire consumption interface: no query skill, no
 wrapper, no config file. Its frontmatter description fires it from natural
@@ -17,30 +17,34 @@ Two properties the rest of the kit depends on:
                 no-op diff. Never hand-edit a router; regenerate it.
   self-rooted   The brain's absolute root is recorded in the frontmatter
                 metadata and in the body, so the router works from any
-                directory once attached.
+                directory once attached. `--root` records a location other than
+                the one the brain currently sits in — for a brain generated
+                before it is moved into place, or a reference brain committed to
+                a repo, whose real home is `~/brains/<slug>/`.
 
 Metadata comes off the brain itself — `index.md` frontmatter (`slug`, `title`,
 `domain`, `kind`, `stance`) — with the folder name as the fallback slug and
 title. Overlays are never declared: `persona/` and `standing/` are detected on
-disk, and the persona stance follows the overlay, not the label.
+disk. A declared `stance` always wins; where none is declared, a persona kind or
+a `persona/` overlay implies the persona stance, and everything else is advisor.
 
 Stdlib only.
 """
 import os
 import sys
 
-from brain_contract import OVERLAY_DIRS, parse_frontmatter
+from brain_contract import OVERLAY_DIRS, read_page
 
 DEFAULT_KIND = "subject"
-PERSONA_OVERLAY = "persona"
-STANDING_OVERLAY = "standing"
+PERSONA_OVERLAY, STANDING_OVERLAY = OVERLAY_DIRS
 
 
 class BrainMeta(object):
     """What the brain says about itself, as the router needs it."""
 
-    def __init__(self, root, slug, title, domain, kind, stance, overlays):
-        self.root = root
+    def __init__(self, root, recorded_root, slug, title, domain, kind, stance, overlays):
+        self.root = root                    # where the brain sits now
+        self.recorded_root = recorded_root  # the root the router records
         self.slug = slug
         self.title = title
         self.domain = domain
@@ -53,33 +57,44 @@ class BrainMeta(object):
         return PERSONA_OVERLAY in self.overlays
 
     @property
+    def speaks_as_persona(self):
+        """Voice files plus the stance to use them. Either alone is not a persona."""
+        return self.has_persona and self.stance == "persona"
+
+    @property
     def has_standing(self):
         return STANDING_OVERLAY in self.overlays
 
 
-def read_brain_meta(root, kind=None):
+def read_brain_meta(root, kind=None, recorded_root=None):
     """Read a brain's own account of itself off `index.md` and its folders."""
     root = os.path.abspath(os.path.expanduser(root))
-    index = os.path.join(root, "index.md")
-    if not os.path.isfile(index):
+    if not os.path.isfile(os.path.join(root, "index.md")):
         raise ValueError("{}: no index.md — not a brain, nothing to route".format(root))
-    with open(index, "r", encoding="utf-8") as handle:
-        front, _, _ = parse_frontmatter(handle.read())
+    front = read_page(root, "index.md").frontmatter
 
     folder = os.path.basename(root)
-    slug = _text(front.get("slug")) or folder
     overlays = [name for name in OVERLAY_DIRS if os.path.isdir(os.path.join(root, name))]
     resolved_kind = kind or _text(front.get("kind")) or DEFAULT_KIND
-    stance = _text(front.get("stance")) or ("persona" if PERSONA_OVERLAY in overlays else "advisor")
     return BrainMeta(
         root=root,
-        slug=slug,
+        recorded_root=recorded_root or root,
+        slug=_text(front.get("slug")) or folder,
         title=_text(front.get("title")) or folder,
         domain=_text(front.get("domain")),
         kind=resolved_kind,
-        stance="persona" if PERSONA_OVERLAY in overlays else stance,
+        stance=_resolve_stance(_text(front.get("stance")), resolved_kind, overlays),
         overlays=overlays,
     )
+
+
+def _resolve_stance(declared, kind, overlays):
+    """A declared stance always wins — stances are extensible, not a cap of two."""
+    if declared:
+        return declared
+    if kind == "persona" or PERSONA_OVERLAY in overlays:
+        return "persona"
+    return "advisor"
 
 
 def _text(value):
@@ -88,18 +103,22 @@ def _text(value):
     return str(value).strip() if value is not None else ""
 
 
-def generate_router(root, kind=None):
+def generate_router(root, kind=None, recorded_root=None):
     """Return the full text of the brain's `SKILL.md`."""
-    meta = read_brain_meta(root, kind=kind)
+    return render_router(read_brain_meta(root, kind=kind, recorded_root=recorded_root))
+
+
+def render_router(meta):
+    """Render a router from metadata already read."""
     return _frontmatter(meta) + "\n" + "\n\n".join(_sections(meta)) + "\n"
 
 
-def write_router(root, kind=None):
+def write_router(root, kind=None, recorded_root=None):
     """Write (or rewrite, in place) the brain's `SKILL.md`. Returns its path."""
-    meta = read_brain_meta(root, kind=kind)
+    meta = read_brain_meta(root, kind=kind, recorded_root=recorded_root)
     path = os.path.join(meta.root, "SKILL.md")
     with open(path, "w", encoding="utf-8") as handle:
-        handle.write(generate_router(meta.root, kind=kind))
+        handle.write(render_router(meta))
     return path
 
 
@@ -120,7 +139,7 @@ def _frontmatter(meta):
         "  type: brain-router",
         "  kind: {}".format(meta.kind),
         "  stance: {}".format(meta.stance),
-        "  brain_root: {}".format(meta.root),
+        "  brain_root: {}".format(meta.recorded_root),
     ]
     if meta.overlays:
         lines.append("  overlays: [{}]".format(", ".join(meta.overlays)))
@@ -136,7 +155,7 @@ def _sentence(text):
 
 def _sections(meta):
     sections = [_header(meta), _navigation(), _stance(meta)]
-    if meta.has_persona:
+    if meta.speaks_as_persona:
         sections.append(_persona_overlay(meta))
     if meta.has_standing:
         sections.append(_standing_overlay())
@@ -151,7 +170,7 @@ def _header(meta):
         "config file. It is generated: regenerate it rather than editing it by hand.\n\n"
         "- **Brain root**: `{root}`\n"
         "- **Regenerate**: `python3 gen_router.py {root}`"
-    ).format(title=meta.title, root=meta.root)
+    ).format(title=meta.title, root=meta.recorded_root)
 
 
 def _navigation():
@@ -179,7 +198,7 @@ def _stance(meta):
         "- **Advisor stance is the default**: answer as yourself, an expert who holds this",
         "  material. This brain's declared stance is **{}**.".format(meta.stance),
     ]
-    if meta.has_persona:
+    if meta.speaks_as_persona:
         lines.append("- This brain declares a persona. See the persona overlay below; it changes")
         lines.append("  the voice, never the facts.")
     lines += [
@@ -201,12 +220,8 @@ def _persona_overlay(meta):
         "## Persona overlay",
         "",
         "- **Speak as {}** — first person, their voice, never a report about them.".format(meta.title),
-        "- Load `persona/voice.md` and `persona/exemplars.md` whole, and never merge them",
-        "  with facts pages: voice is not evidence and evidence is not voice.",
-        "- The anti-caricature section of `persona/voice.md` is a hallucination brake, not a",
-        "  style note. Honour it — inventing a statistic in the right voice is still",
-        "  inventing a statistic.",
-        "- The overlay does not load for pure facts questions.",
+        "- Load `persona/voice.md` and `persona/exemplars.md` **whole**, and never merge",
+        "  them with facts pages: voice is not evidence, and evidence is not voice.",
     ])
 
 
@@ -228,6 +243,8 @@ def _answering():
         "- **Never narrate retrieval.** No \"Loading…\", no \"Reading the index\", no \"I found",
         "  five pages\". The work is invisible; the answer is the output.",
         "- Second person, your own voice, flat certainty on this brain's own facts.",
+        "- **Stay inside the page budget**: 2–3 wiki pages per question, per brain. If",
+        "  three pages do not answer it, say what is missing rather than opening more.",
         "- **In-domain gaps**: `index.md`'s `## Known gaps` section is the register. Refusal",
         "  fires **only** when the question is inside the domain but uncovered — say so",
         "  plainly, in a sentence, and offer what the brain does cover nearby.",
@@ -297,23 +314,24 @@ def _conflicts():
 # --- cli -------------------------------------------------------------------
 
 def main(argv):
-    positional, kind = [], None
+    positional, options = [], {"--kind": None, "--root": None}
     pending = iter(argv[1:])
     for arg in pending:
-        if arg == "--kind":
-            kind = next(pending, None)
-            if kind is None:
-                sys.stderr.write("gen_router.py: --kind needs a value\n")
+        name, _, inline = arg.partition("=")
+        if name in options:
+            value = inline if inline else next(pending, None)
+            if not value:
+                sys.stderr.write("gen_router.py: {} needs a value\n".format(name))
                 return 2
-        elif arg.startswith("--kind="):
-            kind = arg.split("=", 1)[1]
+            options[name] = value
         else:
             positional.append(arg)
     if len(positional) != 1:
-        sys.stderr.write("usage: gen_router.py <brain-dir> [--kind <kind>]\n")
+        sys.stderr.write("usage: gen_router.py <brain-dir> [--kind <kind>] [--root <path>]\n")
         return 2
     try:
-        path = write_router(positional[0], kind=kind)
+        path = write_router(positional[0], kind=options["--kind"],
+                            recorded_root=options["--root"])
     except (ValueError, OSError) as failure:
         sys.stderr.write("gen_router.py: {}\n".format(failure))
         return 1

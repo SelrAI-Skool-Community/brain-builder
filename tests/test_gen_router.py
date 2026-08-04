@@ -82,6 +82,30 @@ class BrainMetadata(BrainOnDisk):
         frontmatter, _, _ = parse_frontmatter(text)
         self.assertEqual("business", frontmatter["metadata"]["kind"])
 
+    def test_a_declared_stance_wins_over_everything(self):
+        """Stances are extensible — a declared one is never overwritten."""
+        brain = self.minimal_brain(kind="persona", stance="socratic")
+        self.write(brain, "persona/voice.md", page("# V\n", type="voice"))
+        self.assertEqual("socratic", read_brain_meta(brain).stance)
+
+    def test_a_persona_kind_takes_the_persona_stance_without_a_declaration(self):
+        brain = self.minimal_brain(slug="pk", kind="persona", stance="")
+        self.assertEqual("persona", read_brain_meta(brain).stance)
+
+    def test_a_persona_overlay_implies_the_persona_stance(self):
+        brain = self.minimal_brain(slug="po", stance="")
+        self.write(brain, "persona/voice.md", page("# V\n", type="voice"))
+        self.assertEqual("persona", read_brain_meta(brain).stance)
+
+    def test_the_recorded_root_can_differ_from_where_the_brain_sits(self):
+        """A reference brain records where it lives once installed, not the repo."""
+        brain = self.minimal_brain()
+        text = generate_router(brain, recorded_root="~/brains/test-brain")
+        frontmatter, body, _ = parse_frontmatter(text)
+        self.assertEqual("~/brains/test-brain", frontmatter["metadata"]["brain_root"])
+        self.assertIn("~/brains/test-brain", body)
+        self.assertNotIn(brain, text)
+
     def test_overlays_are_detected_from_disk_not_declared(self):
         brain = self.minimal_brain()
         self.assertEqual([], read_brain_meta(brain).overlays)
@@ -150,6 +174,17 @@ class RuleBlocks(BrainOnDisk):
             "extensible",                # never written as a cap of two
         )
 
+    def test_the_page_budget_is_restated_in_the_answering_rules(self):
+        """Spec §3: it was ignored where it sat only in navigation."""
+        for block in ("## Navigation", "## Answering"):
+            with self.subTest(block=block):
+                self.assertIn("2–3 wiki pages", flatten(self.section(block)))
+
+    def section(self, heading):
+        body = generate_router(self.brain)
+        after = body.split(heading, 1)[1]
+        return after.split("\n## ", 1)[0]
+
     def test_answering_rules(self):
         self.assertCarries(
             "lead with the answer",
@@ -214,10 +249,18 @@ class PerKindAndOverlayRules(BrainOnDisk):
         self.assertIn(flatten("(as of …; canonical …)"), body)
 
     def test_a_persona_overlay_switches_the_stance_and_loads_the_overlay(self):
-        body = self.body_for(kind="persona", slug="persona-kb", overlays=("persona",))
+        body = self.body_for(kind="persona", slug="persona-kb", stance="",
+                             overlays=("persona",))
+        self.assertIn("stance: persona", body)
         self.assertIn("persona/voice.md", body)
         self.assertIn("persona/exemplars.md", body)
         self.assertIn("speak as", body)
+
+    def test_voice_files_without_the_persona_stance_never_say_speak_as(self):
+        """A declared non-persona stance must not be contradicted by the overlay."""
+        body = self.body_for(slug="quiet-kb", stance="advisor", overlays=("persona",))
+        self.assertIn("stance: advisor", body)
+        self.assertNotIn("speak as", body)
 
     def test_without_a_persona_overlay_the_router_says_nothing_about_one(self):
         self.assertNotIn("persona/voice.md", self.body_for(slug="plain-kb"))
@@ -247,6 +290,12 @@ class CommandLine(BrainOnDisk):
         self.assertEqual(0, self.run_cli(brain, "--kind", "business"))
         with open(os.path.join(brain, "SKILL.md"), encoding="utf-8") as handle:
             self.assertIn("kind: business", handle.read())
+
+    def test_the_cli_takes_a_root_override(self):
+        brain = self.minimal_brain()
+        self.assertEqual(0, self.run_cli(brain, "--root=~/brains/test-brain"))
+        with open(os.path.join(brain, "SKILL.md"), encoding="utf-8") as handle:
+            self.assertIn("brain_root: ~/brains/test-brain", handle.read())
 
     def test_the_cli_reports_a_folder_it_cannot_route(self):
         self.assertEqual(1, self.run_cli(os.path.join(self.tmp, "nope")))

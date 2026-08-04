@@ -23,7 +23,7 @@ def page(body="Body.\n", **frontmatter):
     """A markdown page: frontmatter keys in order given, then the body."""
     lines = ["---"]
     for key, value in frontmatter.items():
-        lines.append("{}: {}".format(key.rstrip("_"), value))
+        lines.append("{}: {}".format(key, value))
     lines.append("---")
     lines.append("")
     return "\n".join(lines) + body

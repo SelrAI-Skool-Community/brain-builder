@@ -30,13 +30,10 @@ OVERLAY_DIRS = ("persona", "standing")
 #: OKF reserves these names, and reserves them for the brain root.
 RESERVED_TYPES = {"index.md": "index", "log.md": "log"}
 
-#: `raw/` is immutable source material: never parsed, never linted, only quoted.
-FENCED_DIRS = ("raw",)
-
 VOLATILITY_VALUES = ("fast", "slow", "stable")
 
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)(?:\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 _LINK = re.compile(r"(?<!!)\[[^\]]*\]\(\s*<?([^)>\s]+)>?\s*\)")
 _FENCED_BLOCK = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
 
@@ -54,6 +51,11 @@ class Page(object):
     @property
     def type(self):
         return self.frontmatter.get("type")
+
+    @property
+    def in_overlay(self):
+        """Overlay pages are loaded whole, so OKF page rules do not bind them."""
+        return self.relpath.split("/")[0] in OVERLAY_DIRS
 
     def links(self):
         """Relative link targets in the body, code blocks excluded."""
@@ -80,71 +82,71 @@ def parse_frontmatter(text):
 
 
 def _parse_block(block):
-    root = {}
-    stack = [(-1, root)]
-    pending = None  # (container, key, indent) awaiting an indented list or scalar
-    lines = block.split("\n")
-    index = 0
+    lines = [line.rstrip() for line in block.split("\n")
+             if line.strip() and not line.lstrip().startswith("#")]
+    if not lines:
+        return {}
+    mapping, _ = _parse_mapping(lines, 0, _indent(lines[0]))
+    return mapping
+
+
+def _parse_mapping(lines, index, indent):
+    """Read `key: value` pairs at `indent` until the block ends or outdents."""
+    mapping = {}
     while index < len(lines):
-        raw = lines[index].rstrip()
-        index += 1
-        if not raw.strip() or raw.lstrip().startswith("#"):
-            continue
-        indent = len(raw) - len(raw.lstrip())
-        stripped = raw.strip()
-
-        if stripped.startswith("- "):
-            if pending is None:
-                continue
-            container, key, _ = pending
-            container.setdefault(key, [])
-            if isinstance(container[key], list):
-                container[key].append(_scalar(stripped[2:]))
-            continue
-
-        while len(stack) > 1 and indent <= stack[-1][0]:
-            stack.pop()
-        container = stack[-1][1]
-
+        line = lines[index]
+        stripped = line.strip()
+        if _indent(line) < indent or stripped.startswith("- "):
+            break
         if ":" not in stripped:
+            index += 1
             continue
         key, _, value = stripped.partition(":")
-        key, value = key.strip(), value.strip()
-
-        if value in (">", "|", ">-", "|-"):
-            folded, index = _read_block_scalar(lines, index, indent)
-            container[key] = folded
-            pending = None
-        elif value == "":
-            child = {}
-            container[key] = child
-            stack.append((indent, child))
-            pending = (container, key, indent)
+        own_indent = _indent(line)
+        index += 1
+        if value.strip() in (">", "|", ">-", "|-"):
+            mapping[key.strip()], index = _read_block_scalar(lines, index, own_indent)
+        elif value.strip() == "":
+            mapping[key.strip()], index = _parse_child(lines, index, own_indent)
         else:
-            container[key] = _scalar(value)
-            pending = None
-    _prune_empty_maps(root)
-    return root
+            mapping[key.strip()] = _scalar(value)
+    return mapping, index
+
+
+def _parse_child(lines, index, parent_indent):
+    """What follows a bare `key:` — a list, a nested mapping, or nothing."""
+    if index >= len(lines):
+        return "", index
+    line = lines[index]
+    own_indent = _indent(line)
+    if line.strip().startswith("- ") and own_indent >= parent_indent:
+        return _parse_sequence(lines, index, own_indent)
+    if own_indent > parent_indent:
+        return _parse_mapping(lines, index, own_indent)
+    return "", index
+
+
+def _parse_sequence(lines, index, indent):
+    items = []
+    while index < len(lines):
+        line = lines[index]
+        if _indent(line) != indent or not line.strip().startswith("- "):
+            break
+        items.append(_scalar(line.strip()[2:]))
+        index += 1
+    return items, index
 
 
 def _read_block_scalar(lines, index, indent):
     collected = []
-    while index < len(lines):
-        line = lines[index]
-        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
-            break
-        collected.append(line.strip())
+    while index < len(lines) and _indent(lines[index]) > indent:
+        collected.append(lines[index].strip())
         index += 1
     return " ".join(part for part in collected if part), index
 
 
-def _prune_empty_maps(mapping):
-    """A `key:` that got a list instead of children leaves an empty dict behind."""
-    for key, value in list(mapping.items()):
-        if isinstance(value, dict):
-            _prune_empty_maps(value)
-            if not value:
-                mapping[key] = ""
+def _indent(line):
+    return len(line) - len(line.lstrip())
 
 
 def _scalar(value):
@@ -173,10 +175,10 @@ def contract_pages(root):
     overlays are walked.
     """
     pages = []
-    for name in ("index.md", "log.md"):
+    for name in sorted(RESERVED_TYPES):
         if os.path.isfile(os.path.join(root, name)):
             pages.append(read_page(root, name))
-    for folder in ("wiki",) + OVERLAY_DIRS:
+    for folder in MANDATORY_DIRS + OVERLAY_DIRS:
         base = os.path.join(root, folder)
         if not os.path.isdir(base):
             continue

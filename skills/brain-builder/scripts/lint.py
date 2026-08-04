@@ -12,10 +12,13 @@ What is checked:
   skeleton     `SKILL.md` + `index.md` + `wiki/` mandatory; `raw/`, `log.md`,
                `CHANGELOG.md` warn; `index.md` carries `## Known gaps`;
                folders the contract has never heard of are ignored, not errors.
-  frontmatter  OKF conformance — every contract page carries frontmatter with a
+  frontmatter  OKF conformance — every routed page carries frontmatter with a
                `type`; the reserved names `index.md` and `log.md` carry their
-               reserved type and are not reused inside `wiki/`.
-  freshness    `as_of` / `volatility` / `canonical` validated where present.
+               reserved type and are not reused inside `wiki/`. Overlay pages
+               (`persona/`, `standing/`) are loaded whole rather than routed, so
+               the page rules do not bind them.
+  freshness    `as_of` / `volatility` / `canonical` are optional, and validated
+               only where present.
   links        every relative markdown link resolves, and stays inside the brain.
 
 Stdlib only.
@@ -24,7 +27,6 @@ import os
 import sys
 
 from brain_contract import (
-    FENCED_DIRS,
     MANDATORY_DIRS,
     MANDATORY_FILES,
     OPTIONAL_DIRS,
@@ -33,7 +35,7 @@ from brain_contract import (
     VOLATILITY_VALUES,
     contract_pages,
     is_iso_date,
-    parse_frontmatter,
+    read_page,
 )
 
 KNOWN_GAPS_HEADING = "## Known gaps"
@@ -105,26 +107,25 @@ def _check_skeleton(root, report):
 
 
 def _check_router(root, report):
-    with open(os.path.join(root, "SKILL.md"), "r", encoding="utf-8") as handle:
-        frontmatter, _, present = parse_frontmatter(handle.read())
-    if not present:
+    router = read_page(root, "SKILL.md")
+    if not router.has_frontmatter:
         report.error("SKILL.md has no frontmatter — regenerate it with gen_router.py")
         return
     for field in ("name", "description"):
-        if not frontmatter.get(field):
+        if not router.frontmatter.get(field):
             report.error("SKILL.md frontmatter has no {} — the router cannot fire "
                          "without one; regenerate it with gen_router.py".format(field))
 
 
 def _check_index(root, report):
-    with open(os.path.join(root, "index.md"), "r", encoding="utf-8") as handle:
-        text = handle.read()
-    if KNOWN_GAPS_HEADING not in text:
+    if KNOWN_GAPS_HEADING not in read_page(root, "index.md").body:
         report.error("index.md has no `{}` section — honest refusal depends on it"
                      .format(KNOWN_GAPS_HEADING))
 
 
 def _check_frontmatter(page, report):
+    if page.in_overlay:
+        return  # overlays are loaded whole, not routed as OKF pages (spec §4)
     if not page.has_frontmatter:
         report.error("{}: no frontmatter — every page carries OKF frontmatter"
                      .format(page.relpath))
@@ -157,8 +158,9 @@ def _check_freshness(page, report):
         report.error("{}: `volatility: {}` is not one of {}"
                      .format(page.relpath, volatility, "/".join(VOLATILITY_VALUES)))
     if volatility == "fast" and not as_of:
-        report.error("{}: `volatility: fast` needs an `as_of` date — the router "
-                     "answers fast facts with their date attached".format(page.relpath))
+        report.warn("{}: `volatility: fast` with no `as_of` — the router answers "
+                    "fast facts with their date attached, and has none to attach"
+                    .format(page.relpath))
     if "canonical" in frontmatter and not str(frontmatter.get("canonical") or "").strip():
         report.error("{}: `canonical` is empty — say where the live truth lives, "
                      "or drop the field".format(page.relpath))

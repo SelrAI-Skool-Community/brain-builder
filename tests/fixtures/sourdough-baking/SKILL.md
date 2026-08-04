@@ -5,7 +5,7 @@ metadata:
   type: brain-router
   kind: subject
   stance: advisor
-  brain_root: /Users/harveyshaw/selrai/products/brain-builder/tests/fixtures/sourdough-baking
+  brain_root: ~/brains/sourdough-baking
 ---
 
 # Sourdough Baking — brain router
@@ -13,8 +13,8 @@ metadata:
 This file is the brain's entire interface — no query skill, no wrapper, no
 config file. It is generated: regenerate it rather than editing it by hand.
 
-- **Brain root**: `/Users/harveyshaw/selrai/products/brain-builder/tests/fixtures/sourdough-baking`
-- **Regenerate**: `python3 gen_router.py /Users/harveyshaw/selrai/products/brain-builder/tests/fixtures/sourdough-baking`
+- **Brain root**: `~/brains/sourdough-baking`
+- **Regenerate**: `python3 gen_router.py ~/brains/sourdough-baking`
 
 ## Navigation
 
@@ -50,6 +50,8 @@ config file. It is generated: regenerate it rather than editing it by hand.
 - **Never narrate retrieval.** No "Loading…", no "Reading the index", no "I found
   five pages". The work is invisible; the answer is the output.
 - Second person, your own voice, flat certainty on this brain's own facts.
+- **Stay inside the page budget**: 2–3 wiki pages per question, per brain. If
+  three pages do not answer it, say what is missing rather than opening more.
 - **In-domain gaps**: `index.md`'s `## Known gaps` section is the register. Refusal
   fires **only** when the question is inside the domain but uncovered — say so
   plainly, in a sentence, and offer what the brain does cover nearby.

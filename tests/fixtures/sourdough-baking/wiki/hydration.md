@@ -1,7 +1,9 @@
 ---
 type: concept
 title: Hydration
-volatility: stable
+as_of: 2026-01-20
+volatility: slow
+canonical: the miller's current spec sheet for the flour in use
 ---
 
 # Hydration
@@ -22,7 +24,7 @@ Above 75 % the dough has no shape of its own until structure is built, so the fo
 ## Flour corrections
 
 - **Wholemeal** absorbs a further **5–8 %**: a 30 % wholemeal blend at nominal 70 % handles like 64 % unless you add it.
-- **Protein content** moves the ceiling, not the baseline. Below 11.5 % protein, treat 72 % as the practical maximum.
+- **Protein content** moves the ceiling, not the baseline. Below 11.5 % protein, treat 72 % as the practical maximum. Protein varies by harvest, which is why this page carries an `as_of` date and points at the miller's spec sheet as canonical.
 - **Autolyse** — flour and water alone for 30–60 minutes before salt and starter — makes 75 % handle roughly like 70 %.
 
 Weigh water to the gram. A 2 % hydration error is 20 g on a 1 kg bake and is visible in the finished [crust and crumb](bake-and-crust.md).

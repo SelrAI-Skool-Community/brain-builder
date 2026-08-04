@@ -98,12 +98,19 @@ class FrontmatterRules(BrainOnDisk):
         self.write(brain, "raw/transcript.md", "Bare transcript text, no frontmatter.\n")
         self.assertTrue(lint_brain(brain).ok)
 
-    def test_overlay_pages_are_held_to_the_frontmatter_rules(self):
+    def test_overlay_pages_are_exempt_because_they_load_whole(self):
+        """`persona/` and `standing/` are loaded whole, not routed as OKF pages."""
         brain = self.minimal_brain()
         self.write(brain, "standing/policy.md", "# Policy\n\nNo frontmatter.\n")
+        self.write(brain, "persona/voice.md", "# Voice\n\nNo frontmatter either.\n")
+        self.assertTrue(lint_brain(brain).ok, lint_brain(brain).errors)
+
+    def test_overlay_pages_are_still_link_checked(self):
+        brain = self.minimal_brain()
+        self.write(brain, "standing/policy.md", "# Policy\n\nSee [gone](missing.md).\n")
         report = lint_brain(brain)
         self.assertFalse(report.ok)
-        self.assertTrue(any("standing/policy.md" in e for e in report.errors), report.errors)
+        self.assertTrue(any("missing.md" in e for e in report.errors), report.errors)
 
 
 class FreshnessRules(BrainOnDisk):
@@ -132,13 +139,14 @@ class FreshnessRules(BrainOnDisk):
         self.assertFalse(report.ok)
         self.assertTrue(any("as_of" in e for e in report.errors), report.errors)
 
-    def test_fast_facts_without_an_as_of_date_fail(self):
+    def test_fast_facts_without_an_as_of_date_warn_but_pass(self):
+        """The fields are optional (spec §2) — the pairing is advice, not a rule."""
         brain = self.minimal_brain()
         self.write(brain, "wiki/concept.md", page(
             "# Concept\n", type="concept", volatility="fast"))
         report = lint_brain(brain)
-        self.assertFalse(report.ok)
-        self.assertTrue(any("as_of" in e for e in report.errors), report.errors)
+        self.assertTrue(report.ok, report.errors)
+        self.assertTrue(any("as_of" in w for w in report.warnings), report.warnings)
 
     def test_an_empty_canonical_fails(self):
         brain = self.minimal_brain()

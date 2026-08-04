@@ -149,12 +149,22 @@ def _sentence(text):
 # --- body ------------------------------------------------------------------
 
 def _sections(meta):
+    """The shared blocks every brain carries, plus the ones its kind adds.
+
+    Per-kind sections are **additive**: a subject brain renders exactly the six
+    shared blocks, and a persona or business brain renders those same blocks
+    with its own slotted in beside them. Nothing a kind adds rewrites a shared
+    rule, which is what keeps one committed reference router regenerable.
+    """
     sections = [_header(meta), _navigation(), _stance(meta)]
     if meta.speaks_as_persona:
-        sections.append(_persona_overlay(meta))
+        sections += [_persona_overlay(meta), _anti_caricature(meta), _calibration(meta)]
     if meta.has_standing:
         sections.append(_standing_overlay())
-    sections += [_answering(), _citation(meta), _write_back(), _conflicts()]
+    sections.append(_answering())
+    if meta.kind == "business":
+        sections += [_freshness(), _confidentiality()]
+    sections += [_citation(meta), _write_back(), _conflicts()]
     return sections
 
 
@@ -217,6 +227,50 @@ def _persona_overlay(meta):
         "- **Speak as {}** — first person, their voice, never a report about them.".format(meta.title),
         "- Load `persona/voice.md` and `persona/exemplars.md` **whole**, and never merge",
         "  them with facts pages: voice is not evidence, and evidence is not voice.",
+        "- The overlay is **never cited**. It carries no facts, so it never appears in a",
+        "  Sources block — cite the wiki page the claim itself came from.",
+    ])
+
+
+def _anti_caricature(meta):
+    """Mandatory on every persona brain — a hallucination brake, not a style note.
+
+    An imitated voice reaches for the loudest three traits and then invents the
+    figures that fit the shape it has made. Written down, this block demonstrably
+    killed invented statistics before they reached a page (spec.md §4).
+    """
+    return "\n".join([
+        "## Anti-caricature",
+        "",
+        "This is a **hallucination brake before it is a style note**. An imitated voice",
+        "reaches for the loudest traits and then invents the numbers that fit them.",
+        "",
+        "- **Never improvise a number.** A figure that is not on a wiki page does not get",
+        "  said in {}'s voice — no rounding to what sounds right, no benchmark".format(meta.title),
+        "  recalled from general knowledge and put in their mouth. A confident voice",
+        "  attached to an invented figure is the worst thing this brain can do.",
+        "- **Use their tics at the rate the corpus uses them**, which is far lower than an",
+        "  impression of them. A catchphrase in every answer is caricature, not fidelity.",
+        "- **Never extend their positions.** Where they have not covered something, they",
+        "  have not covered it — say so in their register rather than generating the view",
+        "  they would probably hold.",
+        "- Where the corpus is **thin**, confidence drops with it. Their certainty is not",
+        "  yours to perform.",
+    ])
+
+
+def _calibration(meta):
+    """The persona kind's proof: one question whose answer is already known."""
+    return "\n".join([
+        "## Calibration",
+        "",
+        "- The check is one question whose **answer you already know** from the corpus —",
+        "  `index.md`'s one-liners carry the real numbers, so a known answer is always to",
+        "  hand. Both halves are checked at once: the fact lands, and it sounds like",
+        "  {} at the length they would actually answer at.".format(meta.title),
+        "- A voice miss is an overlay problem — too few exemplars, or exemplars with no",
+        "  range. A fact miss is a thin page or a `## Known gaps` entry. They are fixed in",
+        "  different places, so name which one missed.",
     ])
 
 
@@ -248,6 +302,45 @@ def _answering():
         "  question for this brain.",
         "- Facts from pages marked `volatility: fast` are answered with their **as-of date",
         "  attached in the same breath** — the number stays exact, the date is the honesty.",
+    ])
+
+
+def _freshness():
+    """Business kind: the date is what keeps an exact number honest (spec.md §4)."""
+    return "\n".join([
+        "## Freshness",
+        "",
+        "- A fact from a page carrying `as_of` is answered **with its date attached in the",
+        "  same breath** — the number stays exact, the date is the honesty. It is not a",
+        "  hedge, and it does not soften the answer.",
+        "- `volatility: fast` pages are the ones that rot — prices, rates, capacity,",
+        "  current status. Attach the date to those without exception, and name the page's",
+        "  `canonical:` source alongside it: that is where the live truth is confirmed today.",
+        "- `slow` and `stable` facts are answered flat. The date is there if it is asked for.",
+        "- When a `fast` fact's `as_of` is old enough that it has probably moved, say so in",
+        "  a clause and point at `canonical:`. Never serve a stale number silently, and",
+        "  never refuse to give the number at all — the member wants both halves.",
+        "- **Write-back is routine here**, not exceptional: this is the kind that goes",
+        "  stale. A price, status or process confirmed in conversation files back the same",
+        "  day, with `as_of` set to that day.",
+    ])
+
+
+def _confidentiality():
+    """Business kind: the material is the organisation's own (spec.md §4)."""
+    return "\n".join([
+        "## Confidentiality",
+        "",
+        "- This brain is **local-only**. Its material is the business's own: it is not",
+        "  published, pasted, or summarised into anything that leaves this machine.",
+        "- **One client's details never reach another client's documents**, and never",
+        "  reach outward-facing drafts, **unasked**. Rates, terms, volumes and names are",
+        "  what leak. So do aggregates: \"most clients pay around …\" is one client's rate",
+        "  in a disguise when there are four of them.",
+        "- Drafting anything a named client will read uses their page, the offers, and",
+        "  standing policy. No other client's page is opened for it.",
+        "- Asked for a cross-client comparison, give one. The rule is that it never",
+        "  happens by default.",
     ])
 
 

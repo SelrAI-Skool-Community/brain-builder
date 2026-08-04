@@ -271,6 +271,93 @@ class PerKindAndOverlayRules(BrainOnDisk):
         self.assertIn("unfenced", body)
 
 
+class PersonaRouter(BrainOnDisk):
+    """The persona kind's own router sections (spec.md §4)."""
+
+    def setUp(self):
+        super().setUp()
+        brain = self.minimal_brain(slug="persona-kb", title="The Person",
+                                   kind="persona", stance="")
+        self.write(brain, "persona/voice.md", page("# Voice\n", type="voice"))
+        self.write(brain, "persona/exemplars.md", page("# Exemplars\n", type="exemplars"))
+        self.text = generate_router(brain)
+        self.body = flatten(self.text)
+
+    def section(self, heading):
+        return flatten(self.text.split(heading, 1)[1].split("\n## ", 1)[0])
+
+    def test_the_router_speaks_as_the_person_and_loads_the_overlay_whole(self):
+        self.assertIn("speak as the person", self.body)
+        self.assertIn("persona/voice.md", self.body)
+        self.assertIn("persona/exemplars.md", self.body)
+        self.assertIn("whole", self.body)
+        self.assertIn("never merge", self.body)
+
+    def test_the_anti_caricature_section_is_present_and_brakes_invented_numbers(self):
+        """Spec §4: mandatory, and a hallucination brake before it is a style note."""
+        self.assertIn("## anti-caricature", self.body)
+        block = self.section("## Anti-caricature")
+        for phrase in ("never improvise", "not on a wiki page",
+                       "caricature", "thin"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(flatten(phrase), block)
+
+    def test_the_router_carries_a_calibration_question_with_a_known_answer(self):
+        self.assertIn("calibration", self.body)
+        self.assertIn("answer you already know", self.body)
+
+    def test_the_voice_overlay_is_never_cited_as_evidence(self):
+        self.assertIn("never cited", self.body)
+
+    def test_a_subject_brain_carries_none_of_the_persona_sections(self):
+        body = flatten(generate_router(self.minimal_brain(slug="plain-kb")))
+        self.assertNotIn("anti-caricature", body)
+        self.assertNotIn("speak as the person", body)
+
+
+class BusinessRouter(BrainOnDisk):
+    """The business kind's own router sections (spec.md §4)."""
+
+    def setUp(self):
+        super().setUp()
+        brain = self.minimal_brain(slug="business-kb", kind="business")
+        self.write(brain, "standing/policy.md", page("# Policy\n", type="policy"))
+        self.text = generate_router(brain)
+        self.body = flatten(self.text)
+
+    def test_the_freshness_rules_attach_the_date_in_the_same_breath(self):
+        self.assertIn("## freshness", self.body)
+        for phrase in ("as_of", "volatility", "canonical", "same breath",
+                       "the date is the honesty"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(flatten(phrase), self.body)
+
+    def test_write_back_is_stated_as_routine_for_this_kind(self):
+        self.assertIn("routine", self.body)
+
+    def test_the_confidentiality_rules_are_in_the_router(self):
+        self.assertIn("## confidentiality", self.body)
+        for phrase in ("local-only", "another client", "outward-facing", "unasked"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(flatten(phrase), self.body)
+
+    def test_a_subject_brain_carries_neither_section(self):
+        body = flatten(generate_router(self.minimal_brain(slug="plain-kb")))
+        self.assertNotIn("## freshness", body)
+        self.assertNotIn("## confidentiality", body)
+
+
+class SubjectRouterIsUnchangedByOtherKinds(BrainOnDisk):
+    """Per-kind sections are additive: the default router keeps its shape."""
+
+    def test_a_subject_router_carries_exactly_the_shared_sections(self):
+        text = generate_router(self.minimal_brain(slug="plain-kb"))
+        headings = [line.strip() for line in text.splitlines() if line.startswith("## ")]
+        self.assertEqual(
+            ["## Navigation", "## Stance", "## Answering", "## Citation",
+             "## Write-back", "## Conflicts"], headings)
+
+
 class CommandLine(BrainOnDisk):
     """`python3 gen_router.py <brain-dir>` is the whole interface."""
 

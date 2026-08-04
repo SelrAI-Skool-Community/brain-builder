@@ -97,11 +97,22 @@ class Blueprints(BrainOnDisk):
 class ShippedBlueprints(unittest.TestCase):
     """The blueprints this kit actually ships (spec.md §4)."""
 
+    def shipped(self):
+        return {b.kind: b for b in list_blueprints(BLUEPRINTS_DIR)}
+
+    def text_of(self, kind):
+        with open(self.shipped()[kind].path, encoding="utf-8") as handle:
+            return flatten(handle.read())
+
     def test_the_subject_blueprint_ships_and_declares_itself(self):
-        kinds = {b.kind: b for b in list_blueprints(BLUEPRINTS_DIR)}
+        kinds = self.shipped()
         self.assertIn("subject", kinds)
         self.assertTrue(kinds["subject"].summary,
                         "the builder explains the shape in a line — it needs a summary")
+
+    def test_all_three_v1_kinds_ship_as_files(self):
+        """Spec §4: subject, persona and business all ship in v1."""
+        self.assertEqual({"business", "persona", "subject"}, set(self.shipped()))
 
     def test_every_shipped_blueprint_is_enumerable_and_declares_a_summary(self):
         blueprints = list_blueprints(BLUEPRINTS_DIR)
@@ -112,14 +123,52 @@ class ShippedBlueprints(unittest.TestCase):
                 self.assertTrue(blueprint.summary)
                 self.assertTrue(blueprint.stance)
 
-    def test_the_subject_blueprint_is_a_skeleton_not_a_worked_example(self):
+    def test_each_shipped_blueprint_declares_the_stance_its_brains_are_built_with(self):
+        """`scaffold_brain` takes the stance off the file — so the file must be right."""
+        stances = {kind: b.stance for kind, b in self.shipped().items()}
+        self.assertEqual({"subject": "advisor", "persona": "persona",
+                          "business": "advisor"}, stances)
+
+    def test_no_shipped_blueprint_is_a_worked_example(self):
         """A worked example gets copied; a skeleton gets filled in (spec.md §4)."""
-        with open(list_blueprints(BLUEPRINTS_DIR)[0].path, encoding="utf-8") as handle:
-            text = handle.read()
-        self.assertIn("subject", flatten(text))
-        for tell in ("sourdough", "hormozi", "70 %"):
-            with self.subTest(tell=tell):
-                self.assertNotIn(tell, flatten(text))
+        for kind in self.shipped():
+            for tell in ("sourdough", "hormozi", "70 %"):
+                with self.subTest(kind=kind, tell=tell):
+                    self.assertNotIn(tell, self.text_of(kind))
+
+    def test_the_subject_blueprint_names_its_own_kind(self):
+        self.assertIn("subject", self.text_of("subject"))
+
+    def test_the_persona_blueprint_is_one_composite_shape_with_the_voice_contract(self):
+        """Spec §4: subject core + voice on top, in one blueprint, never two."""
+        text = self.text_of("persona")
+        for phrase in ("composite", "voice.md", "exemplars.md", "10", "20",
+                       "short-form", "verbatim", "anti-caricature",
+                       "never merged with facts", "loaded whole"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(flatten(phrase), text)
+
+    def test_the_persona_blueprint_keeps_voice_only_behind_the_warned_opt_out(self):
+        """Never advertised — reachable only as a custom shape, after the warning."""
+        text = self.text_of("persona")
+        self.assertIn("no corpus of its own", text)
+        self.assertIn("live research", text)
+        self.assertIn("never advertise", text)
+
+    def test_the_business_blueprint_carries_the_kinds_signature_behaviours(self):
+        """Spec §4: entity/process wiki, standing overlay, freshness, authority, secrecy."""
+        text = self.text_of("business")
+        for phrase in ("entity", "process", "standing/", "unfenced", "as_of",
+                       "volatility", "canonical", "source-authority",
+                       "contradiction", "confidential", "write-back"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(flatten(phrase), text)
+
+    def test_the_business_blueprint_speaks_from_outside_the_business(self):
+        """Advisor stance: "you/the business offers X", never "we"."""
+        text = self.text_of("business")
+        self.assertIn('never "we"', text)
+        self.assertIn("outside the business", text)
 
 
 class Skeleton(BrainOnDisk):

@@ -61,11 +61,13 @@ def clean(text, fmt="text"):
     return _collapse(text)
 
 
-def format_for(mime_type, url=""):
-    """What a `<podcast:transcript>` actually is, by declared type then by URL.
+def known_format(mime_type, url=""):
+    """The format a transcript declares, or `None` when nothing recognises it.
 
     Feeds declare `application/octet-stream` often enough that the extension has
-    to be the fallback, and a feed that declares nothing at all still has one.
+    to be the fallback. `None` is the useful answer for a caller choosing
+    *between* transcripts — a PDF transcript is not one this kit can read, and
+    guessing "text" at it would fill a page with binary.
     """
     declared = (mime_type or "").split(";")[0].strip().lower()
     if declared in _MIME_FORMATS:
@@ -73,7 +75,12 @@ def format_for(mime_type, url=""):
     extension = url.split("?")[0].split("#")[0].rsplit(".", 1)[-1].lower()
     if extension in ("vtt", "srt", "json", "html", "htm"):
         return "html" if extension == "htm" else extension
-    return "text"
+    return None
+
+
+def format_for(mime_type, url=""):
+    """What a `<podcast:transcript>` actually is; plain text when nothing says."""
+    return known_format(mime_type, url) or "text"
 
 
 def parse_cues(text):

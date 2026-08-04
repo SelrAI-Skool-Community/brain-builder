@@ -13,16 +13,15 @@ carries on — one dead file has never been a reason to abandon a corpus. The on
 exception is a corpus that yielded *nothing*, which exits non-zero so the build
 stops rather than producing an empty brain. A folder of file types this arm
 cannot read counts as exactly that: pointing the builder at a folder of PDFs is
-the likeliest way to reach it, and silently building an empty brain would be the
-worst possible answer.
+the likeliest way to reach it, and `ingest_docs.py` is the arm it needs.
 
 Dedup here is **exact**: identical text, whitespace-normalised. Near-verbatim
-dedup (spec.md §6) is a transcript problem — compilations restating other
-episodes — and belongs to the arms that ingest transcripts, not to this one.
+dedup (spec.md §6) is a corpus-wide question — a compilation restating three
+other sources — and belongs to `dedup_corpus.py`, which sees the whole of
+`raw/` at once rather than one file at a time.
 
-`raw/` is immutable, so a second run never overwrites a page a first run wrote:
-what is already in `raw/` is read back, and a source already ingested comes out
-as a duplicate rather than a clobbered file.
+The manifest, the provenance header and the immutable `raw/` are shared with
+every other arm and live in `raw_store.py`.
 
 Stdlib only: `.docx` is a zip of XML, which `zipfile` and `ElementTree` read
 without a third-party library.

@@ -27,6 +27,9 @@ OPTIONAL_FILES = ("log.md", "CHANGELOG.md")
 OPTIONAL_DIRS = ("raw",)
 OVERLAY_DIRS = ("persona", "standing")
 
+#: The kind a brain is when nothing says otherwise.
+DEFAULT_KIND = "subject"
+
 #: OKF reserves these names, and reserves them for the brain root.
 RESERVED_TYPES = {"index.md": "index", "log.md": "log"}
 
@@ -190,6 +193,19 @@ def contract_pages(root):
                 full = os.path.join(dirpath, filename)
                 pages.append(read_page(root, os.path.relpath(full, root)))
     return pages
+
+
+def default_stance(kind, overlays=()):
+    """The stance a brain holds when it has not declared one.
+
+    One rule, in one place: the builder writes a stance into `index.md` and the
+    router reads it back, and the two disagreeing is how a persona brain ends up
+    answering as an advisor. A *declared* stance always wins over this — stances
+    are extensible, and this is not a list of two.
+    """
+    if kind == "persona" or OVERLAY_DIRS[0] in overlays:
+        return "persona"
+    return "advisor"
 
 
 def is_iso_date(value):

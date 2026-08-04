@@ -16,9 +16,10 @@ description: >
 # Brain Builder
 
 Turn a body of source material into a **brain**: a standalone folder of markdown
-at `~/brains/<slug>/` that any harness can attach, that answers as an expert who
-holds the material, cites the page you would edit to fix an error, and says so
-plainly when a question lands inside its domain but outside its corpus.
+at `~/brains/<slug>/` that can be switched on for any AI tool on the machine,
+that answers as an expert who holds the material, cites the page you would edit
+to fix an error, and says so plainly when a question lands inside its subject but
+outside the material it was built from.
 
 Invoke by name (`/brain-builder`) or by saying any of it in your own words. One
 paste-in prompt is a complete invocation — if the opening message already tells
@@ -76,6 +77,42 @@ library and name the `pip install` line if it is missing:
 | Generate the router | `python3 "$KIT/gen_router.py" <brain>` |
 | Lint (last — it checks the router too) | `python3 "$KIT/lint.py" <brain>` |
 
+## How to say it
+
+The member brings three things: what they want out of the brain, where the
+material comes from, and how it should behave. **How it gets built is this kit's
+job, and the kit's vocabulary is not theirs.** Wiki, taxonomy, cluster,
+frontmatter, router, lint, slug, symlink — those are how you think, not how you
+narrate.
+
+That is not permission to hide anything. **Never abstract the machine away —
+explain it.** Where a technical word genuinely earns its place, use it *and*
+define it in the same breath, once, at first use:
+
+> "I'll write it up as a wiki — a folder of small linked pages, one idea per page
+> — so answers can point at the exact page they came from."
+
+Source talk is safe and stays: members know what their own files, videos and
+podcasts are, and counts of them mean something. It is the machinery that needs
+translating.
+
+| Not this | This |
+|---|---|
+| "deciding the taxonomy" | "working out the map — which topics there are, and what belongs on each page" |
+| "one writer per cluster, in parallel" | "writing the sections at the same time, one per group of topics" |
+| "generating the router" | "writing its front page — the summary Claude reads to know when to open the brain and which page to go to" |
+| "running lint" / "lint clean" | "checking it over — every page reachable, every fact still naming its source. All clean." |
+| "the frontmatter is invalid" | "one page carried a setting the format doesn't allow — fixed" |
+| "attached to both harnesses" | "switched on for Claude Code — the tool you're using right now" |
+| "the corpus" | "your material" / "the 86 sources" |
+| "OKF frontmatter with a `type`" | *nothing — this one is yours alone* |
+
+**Do not name other AI tools unless it is actually the member's situation.**
+Claude Code is the tool in front of them; Codex, Gemini and the rest come up only
+when they raise one by name, or when the brain genuinely landed in more than one
+and saying so is the honest answer. **"Harness" is never a word to use with a
+member** — say "the tool you're using", and name it.
+
 ## Phase 1 — Intake
 
 Interview to **shared understanding, not question coverage**. Four things have
@@ -117,8 +154,9 @@ Read that list at runtime rather than assuming which kinds exist — adding a ki
 is adding a file, and this skill is not edited when one lands. Read the chosen
 blueprint's own file before building; it describes the shape you are aiming at.
 
-**Suggest, explain, confirm in a line.** "This is a subject brain — a wiki
-organised by concept, answering as an advisor. Sound right?" Then move on. Do not
+**Suggest, explain, confirm in a line.** "This is a subject brain — a wiki, which
+is a set of small linked pages with one idea on each, organised by topic and
+answering you like an advisor. Sound right?" Then move on. Do not
 present a menu of kinds and ask the member to choose: they told you what they
 want in Phase 1, and picking the shape is your job.
 
@@ -198,6 +236,10 @@ never a running commentary. Five phases: ingest → taxonomy → pages → route
 lint. The last two share one line; overlays add a sixth line on the kinds that
 have them.
 
+Those five names are yours. The lines the member reads use the wording in *How
+to say it* above. **Counts, failures and caveats survive the translation intact**
+— it is the vocabulary that changes, never the honesty.
+
 **Ingest — one arm per source family, then one dedup pass.**
 
 ```bash
@@ -233,7 +275,7 @@ the corpus was, and talk to the member. Never build an empty brain.
 **Close the phase with one line** covering every arm together, and let `log.md`
 hold the detail:
 
-> `↳ Ingested 86 sources (412,900 words) — 3 empty, 2 duplicate, 1 paywalled (quarantined); 2 sources restate others.`
+> `↳ Read 86 sources (412,900 words) — 3 were empty, 2 were duplicates, 1 was paywalled and is set aside unused; 2 more repeat what other sources already say.`
 
 **Taxonomy — one shared pass, before any page is written.** Read across the
 whole of `raw/` and decide the concept map for the brain in one pass: the pages,
@@ -241,7 +283,7 @@ their names, what belongs on each. This happens **before** any parallel work,
 because section agents that each invent their own taxonomy produce a wiki that
 overlaps in some places and dangles in others. Fix the map first; then fill it.
 
-> `↳ Taxonomy: 11 concepts across 3 clusters.`
+> `↳ Mapped the ground: 11 topics, grouped into 3 areas — one page each.`
 
 Use `dedup_corpus.py`'s pairs here: where one source restates another, distil
 the claim **once** and cite the original. Four `raw/` pages saying the same
@@ -255,7 +297,7 @@ its unit, its denominator and its date, because a number that lost its scale is
 not citable however well it is sourced. Never invent a fact to fill a page; a
 thin page is honest, a padded one is not.
 
-> `↳ Pages: 11 written, 38 cross-links.`
+> `↳ Wrote 11 pages, with 38 links between them.`
 
 **Overlays — where the blueprint declares one.** A subject brain has none and
 this step is skipped. The other two are not optional extras: a persona brain
@@ -272,7 +314,7 @@ without its overlay is a subject brain wearing the name of a person.
   (lint holds them to it) and **are linked from `index.md`** like any other
   routed page.
 
-> `↳ Overlay: voice.md + 14 exemplars.`
+> `↳ Voice: 14 rules drawn from the material, plus 14 word-for-word examples.`
 
 **`index.md` — a first-class step, not a formality.** The one-liners are what
 routing runs on, so **each one carries the page's actual numbers**, not a topic
@@ -294,7 +336,7 @@ python3 "$KIT/lint.py" <brain>         # skeleton, frontmatter, links, router
 Regenerating the router is a no-op diff, so fix anything lint reports and run
 both again without thinking about it.
 
-> `↳ Router generated. Lint clean.`
+> `↳ Front page written, and the whole thing checks out — every page reachable, every fact naming its source.`
 
 ## Phase 4 — Self-check
 
@@ -324,17 +366,26 @@ seen it work.
 1. **Attach it** with the `brain-toggle` skill — that skill owns the mechanics.
    If it is not installed, the manual stand-in is one symlink:
    `mkdir -p ~/.claude/skills && ln -sfn ~/brains/<slug> ~/.claude/skills/<slug>`
+   Say it as *"switched on for Claude Code — new sessions will have it, no
+   restart needed"*. Only name a second tool if you actually turned it on there
+   too, and then explain the pair once rather than assuming they know.
 2. **Demo it** with one of the member's **own** questions from Phase 1 — asked
    verbatim, answered by the brain. Their question, their material, their
    answer, in front of them.
 3. **Report in a few lines**: what was built, how many sources and pages, where
    it lives, the one summary line for anything that failed, and what the Known
-   gaps say.
+   gaps say. Plain words throughout — this is the last thing they read, and it is
+   the easiest place to slip back into the kit's own vocabulary.
 
 ## Rules that hold throughout
 
 - **Never ask the member to do architecture.** Taxonomy, page boundaries, file
   layout, frontmatter — yours, every time.
+- **Plain words, and explain the ones that aren't.** The member owns what the
+  brain is for, what it is built from, and how it behaves; the kit owns how it
+  gets built, and the kit's vocabulary stays on the kit's side. Where a technical
+  term genuinely helps, define it in-line the first time — educating is the goal,
+  never dumbing down and never hiding the machine.
 - **Fail loudly, never silently.** A source that could not be read is named in
   the log and counted in the summary. Never quietly skip.
 - **Rights**: build only from material the member lawfully has, on their machine.

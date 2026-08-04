@@ -215,10 +215,21 @@ immutable and YouTube keeps a download archive, so nothing is re-fetched.
 
 ## Step 6 — Tell the member it is ready
 
-Report in a few lines, no more:
+Report in a few lines, no more — and **in plain words**. Everything above this
+step is your vocabulary, not theirs: symlink, harness, fixture, lint and router
+are all words to translate before they reach the member, or to explain in-line
+where the detail genuinely matters. Do not hide anything; just do not assume they
+know the term.
 
-- Both skills installed, and into which harness(es).
-- The verification passed (fixture brain linted clean, suite green).
+- Both skills installed, and where they now work. If they only use Claude Code,
+  that is *"installed for Claude Code — a new session will have it, no restart"*
+  and nothing about tools plural. Say "and Codex too" only if you installed there
+  as well, and explain the pair once when you do.
+- **Say the clone has to stay put, and why**, in the same breath: *"the skills
+  are linked to this folder rather than copied, so a `git pull` updates them —
+  but move the folder and the links break."*
+- The checks passed — *"I ran it against a sample brain end to end and the full
+  test suite: all green"*, not "fixture linted clean, router regenerated".
 - One example of how to start, in their words rather than a command:
 
   > Say *"build me a brain on X from the files in ~/Documents/Y"* — or paste one

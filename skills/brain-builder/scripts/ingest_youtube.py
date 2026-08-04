@@ -360,7 +360,12 @@ class YtDlp(object):
         the entries are flattened until what is left has a video id.
         """
         query = target if "://" in target else "ytsearch{}:{}".format(limit or 20, target)
-        options = self._options(extract_flat="in_playlist")
+        # Listing wants metadata only, but a bare video URL is fully extracted,
+        # and without the JS challenge solver YouTube offers it no formats —
+        # which raises before the captions step ever runs. Formats are never
+        # needed here, so the no-formats case must not be an error.
+        options = self._options(extract_flat="in_playlist",
+                                ignore_no_formats_error=True)
         with self.module().YoutubeDL(options) as ydl:
             info = ydl.extract_info(query, download=False)
         videos = [self._video(row, info) for row in _flatten(info)]

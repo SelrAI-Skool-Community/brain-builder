@@ -285,8 +285,6 @@ def _check_spoken(text, source):
     findings = []
     for match in _SPOKEN.finditer(text):
         spoken = words_to_number(match.group("words"))
-        if spoken is None:
-            continue
         written = parse_number(match.group("digits"))
         if _off(spoken, written):
             findings.append(Finding(

@@ -59,7 +59,7 @@ their own library and name the `pip install` line if it is missing:
 | Ingest YouTube | `python3 scripts/ingest_youtube.py <url-or-search…> --into <brain> [--limit N] [--transcribe] --json` |
 | Ingest web articles | `python3 scripts/ingest_web.py <urls…> --into <brain> --json` |
 | Ingest podcasts | `python3 scripts/ingest_podcast.py <apple-url\|rss-url\|"show name"…> --into <brain> [--limit N] [--transcribe] --json` |
-| Price transcription (Gate 2) | `python3 scripts/ingest_podcast.py --estimate <show…>` · `python3 scripts/transcribe.py --estimate <seconds…>` |
+| Price transcription (Gate 2) | `python3 scripts/ingest_podcast.py --estimate <show…>` · `python3 scripts/ingest_youtube.py --estimate <url…>` · `python3 scripts/transcribe.py --estimate <seconds…>` |
 | Find sources that repeat each other | `python3 scripts/dedup_corpus.py <brain> --json` |
 | Check the figures | `python3 scripts/verify_numbers.py <brain>` |
 | Generate the router | `python3 scripts/gen_router.py <brain>` |
@@ -130,10 +130,6 @@ Local files — 34
   ~/Documents/baking/notes/     18 md   your own bench notes, the numbers live here
   ~/Documents/baking/refs/      12 pdf  the reference books, read by the docs arm
   ~/Downloads/starter-log.csv    1 csv  the feeding log, 14 months of timings
-YouTube — 40
-  @thebreadchannel              40 vid  the technique series, transcripts only
-Podcasts — 12
-  The Bread Show (Apple)        12 eps  8 ship transcripts, 4 would need transcribing
 ```
 
 Then: *"Anything to add or drop?"* This gate is **edited by talking** — the
@@ -156,13 +152,17 @@ One message, four facts, then one approval:
 
   ```bash
   python3 scripts/ingest_podcast.py --estimate <show…>   # prices the feed
+  python3 scripts/ingest_youtube.py --estimate <url…>    # the ceiling for video
   python3 scripts/transcribe.py --estimate <seconds…>    # prices anything else
   ```
 
   For local files, documents and web articles this is **none, $0** — say it
   anyway, because it is the line that stops a surprise on the arms that do
-  transcribe. Only episodes and videos with no published transcript cost
-  anything; a show that publishes its own transcripts is free.
+  transcribe. A feed says which episodes ship transcripts, so its figure is the
+  bill; YouTube does not, so its figure is a ceiling and is quoted as one.
+  A cheaper engine exists (`--engine groq`) at roughly a fifth the price, for
+  **rough indexing only** — its pages are marked never-quote. Do not offer it
+  unless the member raises cost; never make it the default.
 
 Get **one** approval and then build. No further questions during the build: if
 something needs a decision mid-build, make it and note it in the report. The

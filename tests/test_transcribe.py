@@ -70,10 +70,10 @@ class TranscribingOneFile(unittest.TestCase):
     """The arms call this; the tests hand it a stub instead of an API."""
 
     def poster(self, payload=None, record=None):
-        def post(url, headers, path, model_id):
+        def post(url, headers, path, fields):
             if record is not None:
                 record.update({"url": url, "headers": headers, "path": path,
-                               "model_id": model_id})
+                               "fields": fields})
             return payload if payload is not None else {"text": "The transcript."}
         return post
 
@@ -83,10 +83,32 @@ class TranscribingOneFile(unittest.TestCase):
 
     def test_it_sends_the_key_and_the_model_the_engine_declares(self):
         seen = {}
-        transcribe.transcribe("/tmp/ep1.mp3", api_key="k", poster=self.poster(record=seen))
+        transcribe.transcribe("/tmp/ep1.mp3", api_key="k", environ={},
+                              poster=self.poster(record=seen))
         self.assertEqual("k", seen["headers"]["xi-api-key"])
-        self.assertEqual("scribe_v2", seen["model_id"])
+        self.assertEqual({"model_id": "scribe_v1"}, seen["fields"])
         self.assertIn("elevenlabs", seen["url"])
+
+    def test_a_renamed_provider_model_is_an_environment_variable_not_a_release(self):
+        seen = {}
+        transcribe.transcribe("/tmp/ep1.mp3", api_key="k",
+                              environ={"ELEVENLABS_MODEL_ID": "scribe_v3"},
+                              poster=self.poster(record=seen))
+        self.assertEqual({"model_id": "scribe_v3"}, seen["fields"])
+
+    def test_each_engine_names_the_form_field_its_own_api_expects(self):
+        seen = {}
+        transcribe.transcribe("/tmp/ep1.mp3", engine="groq",
+                              environ={"GROQ_API_KEY": "g"},
+                              poster=self.poster(record=seen))
+        self.assertEqual({"model": "whisper-large-v3-turbo"}, seen["fields"])
+
+    def test_the_shared_transcriber_runs_the_engine_the_build_chose(self):
+        """Both arms hand audio to this rather than each closing over `transcribe`."""
+        run = transcribe.transcriber_for("scribe-v2", environ={"ELEVENLABS_API_KEY": "k"})
+        with self.assertRaises(transcribe.TranscriptionError):
+            transcribe.transcriber_for("scribe-v2", environ={})("/tmp/ep1.mp3")
+        self.assertTrue(callable(run))
 
     def test_a_missing_key_fails_loudly_and_names_the_variable_to_set(self):
         with self.assertRaises(transcribe.TranscriptionError) as caught:

@@ -35,7 +35,8 @@ import zipfile
 import xml.etree.ElementTree as ElementTree
 
 import cli
-from raw_store import Manifest, RawStore, Record, log_manifest
+from raw_store import (Manifest, RawStore, Record, log_manifest, report,
+                       walk_sources)
 
 TEXT_FORMATS = {".md": "md", ".markdown": "md", ".txt": "txt", ".text": "txt"}
 SUPPORTED = dict(TEXT_FORMATS, **{".csv": "csv", ".json": "json", ".docx": "docx"})
@@ -53,7 +54,7 @@ def ingest(sources, brain):
     """
     store = RawStore(brain)
     manifest = Manifest(store.brain)
-    for path, relpath in _walk(sources):
+    for path, relpath in walk_sources(sources):
         _ingest_one(path, relpath, store, manifest)
 
     log_manifest(store.brain, manifest)
@@ -79,10 +80,7 @@ def _ingest_one(path, relpath, store, manifest):
         return manifest.add(Record(path, "duplicate", source_format=source_format,
                                    reason="same text as {}".format(already)))
 
-    raw = store.add(text, os.path.splitext(relpath)[0], source=path,
-                    source_format=source_format)
-    return manifest.add(Record(path, "ok", raw=raw, words=len(text.split()),
-                               source_format=source_format))
+    return store.land(manifest, text, os.path.splitext(relpath)[0], path, source_format)
 
 
 def extract(path, source_format):
@@ -142,24 +140,6 @@ def _extract_json(text):
                                                 ensure_ascii=False, sort_keys=False))
 
 
-def _walk(sources):
-    """Every candidate file under `sources`, with the name it will be filed as."""
-    found = []
-    for source in sources:
-        source = os.path.abspath(os.path.expanduser(source))
-        if os.path.isfile(source):
-            found.append((source, os.path.basename(source)))
-            continue
-        for dirpath, dirnames, filenames in os.walk(source):
-            dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
-            for filename in sorted(filenames):
-                if filename.startswith(".") or filename.startswith("~$"):
-                    continue
-                path = os.path.join(dirpath, filename)
-                found.append((path, os.path.relpath(path, source)))
-    return found
-
-
 # --- cli -------------------------------------------------------------------
 
 USAGE = "usage: ingest_local.py <path> [<path> ...] --into <brain-dir> [--json]\n"
@@ -177,14 +157,8 @@ def main(argv):
         sys.stderr.write(USAGE)
         return 2
 
-    manifest = ingest(paths, options["--into"])
-    print(json.dumps(manifest.as_dict(), indent=2)
-          if options["--json"] else manifest.summary())
-    if manifest.whole_corpus_failed:
-        sys.stderr.write("ingest_local.py: nothing could be read — stop and talk to "
-                         "the member rather than building an empty brain\n")
-        return 1
-    return 0
+    return report(ingest(paths, options["--into"]), "ingest_local.py",
+                  "nothing could be read", as_json=options["--json"])
 
 
 if __name__ == "__main__":

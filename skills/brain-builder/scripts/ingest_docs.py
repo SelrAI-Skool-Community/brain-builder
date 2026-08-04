@@ -25,7 +25,6 @@ produced nothing.
 
 Stdlib only, plus the reader for the format actually being read.
 """
-import json
 import os
 import sys
 from html.parser import HTMLParser
@@ -33,7 +32,8 @@ from html.parser import HTMLParser
 import cli
 import ingest_local
 import rights
-from raw_store import Manifest, RawStore, Record, log_manifest
+from raw_store import (Manifest, RawStore, Record, log_manifest, report,
+                       walk_sources)
 
 #: What this arm reads. Everything else is another arm's job or nobody's.
 SUPPORTED = {".pdf": "pdf", ".epub": "epub"}
@@ -50,7 +50,7 @@ def ingest(paths, brain, readers=None):
     readers = readers or {"pdf": read_pdf, "epub": read_epub}
     store = RawStore(brain)
     manifest = Manifest(store.brain)
-    for path in _walk(paths):
+    for path, _relpath in walk_sources(paths):
         _ingest_one(path, store, manifest, readers)
     log_manifest(store.brain, manifest, "docs")
     return manifest
@@ -85,12 +85,10 @@ def _ingest_one(path, store, manifest, readers):
         return manifest.add(Record(path, "duplicate", source_format=source_format,
                                    reason="same text as {}".format(already)))
 
-    raw = store.add(text, meta.get("title") or os.path.splitext(os.path.basename(path))[0],
-                    source=path, source_format=source_format,
-                    title=meta.get("title"), author=meta.get("author"),
-                    published=meta.get("date"))
-    return manifest.add(Record(path, "ok", raw=raw, words=len(text.split()),
-                               source_format=source_format))
+    return store.land(manifest, text,
+                      meta.get("title") or os.path.splitext(os.path.basename(path))[0],
+                      path, source_format, title=meta.get("title"),
+                      author=meta.get("author"), published=meta.get("date"))
 
 
 def read_pdf(path):
@@ -184,23 +182,6 @@ def html_to_text(html):
     return "\n".join(line.strip() for line in text.strip().split("\n"))
 
 
-def _walk(paths):
-    """Every candidate file under `paths` — the extension decides what happens."""
-    found = []
-    for source in paths:
-        source = os.path.abspath(os.path.expanduser(source))
-        if os.path.isfile(source):
-            found.append(source)
-            continue
-        for dirpath, dirnames, filenames in os.walk(source):
-            dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
-            for filename in sorted(filenames):
-                if filename.startswith("."):
-                    continue
-                found.append(os.path.join(dirpath, filename))
-    return found
-
-
 def _no_reader(path):
     extension = os.path.splitext(path)[1].lower()
     if extension in ingest_local.SUPPORTED:
@@ -232,14 +213,8 @@ def main(argv):
         sys.stderr.write(USAGE)
         return 2
 
-    manifest = ingest(paths, options["--into"])
-    print(json.dumps(manifest.as_dict(), indent=2)
-          if options["--json"] else manifest.summary())
-    if manifest.whole_corpus_failed:
-        sys.stderr.write("ingest_docs.py: no document could be read — stop and talk "
-                         "to the member rather than building an empty brain\n")
-        return 1
-    return 0
+    return report(ingest(paths, options["--into"]), "ingest_docs.py",
+                  "no document could be read", as_json=options["--json"])
 
 
 if __name__ == "__main__":

@@ -72,8 +72,9 @@ class Fetcher(object):
     def download(self, url, directory, filename="media"):
         """Read `url` into a file under `directory` and return the path.
 
-        Audio enclosures are too big to hold in memory next to everything else a
-        build is doing, and the transcription engine wants a file anyway.
+        The transcription engine wants a file, not bytes, and a temporary
+        directory is where an audio enclosure belongs — it is a means to a
+        transcript, never material the brain keeps.
         """
         response = self(url)
         path = os.path.join(directory, filename)

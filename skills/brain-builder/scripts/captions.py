@@ -23,9 +23,6 @@ import json
 import re
 from html.parser import HTMLParser
 
-#: What the file is, and therefore how it is read.
-FORMATS = ("vtt", "srt", "json", "html", "text")
-
 #: Below this, a "transcript" is a stub: a throttled fetch, a captions track
 #: that exists but holds nothing, or a placeholder. The prototype's threshold.
 MIN_TRANSCRIPT_CHARS = 200

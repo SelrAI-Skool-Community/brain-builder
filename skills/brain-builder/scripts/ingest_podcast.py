@@ -38,7 +38,7 @@ import cli
 import rights
 import transcribe
 from fetching import DEFAULT_DELAY, FetchError, Fetcher
-from raw_store import Manifest, RawStore, Record, log_manifest
+from raw_store import Manifest, RawStore, Record, log_manifest, report
 
 SOURCE_FORMAT = "podcast"
 
@@ -62,29 +62,58 @@ class Episode(object):
     """One item in a feed, and the two ways its words might be got."""
 
     def __init__(self, title="", guid="", published="", duration=0, page_url="",
-                 enclosure_url="", enclosure_type="", transcripts=None):
+                 enclosure_url="", transcripts=None, feed_url=""):
         self.title = title
         self.guid = guid
         self.published = published
         self.duration = duration
         self.page_url = page_url
         self.enclosure_url = enclosure_url
-        self.enclosure_type = enclosure_type
         self.transcripts = transcripts or []
+        self.feed_url = feed_url
 
     @property
     def source(self):
-        """What the `raw/` page is attributed to: the episode's own page."""
-        return self.page_url or self.enclosure_url or self.guid or self.title
+        """What the `raw/` page is attributed to: the episode's own page.
+
+        Falls back through everything the feed might have given it and ends at
+        the feed itself, because a chunk with nothing to attribute it to is a
+        chunk the rights stance will not let into `raw/` at all.
+        """
+        return (self.page_url or self.enclosure_url or self.guid or self.title
+                or self.feed_url)
+
+
+class Run(object):
+    """One invocation's collaborators, so the per-episode path stays readable."""
+
+    def __init__(self, store, manifest, fetcher, transcriber, transcribe_missing, engine):
+        self.store = store
+        self.manifest = manifest
+        self.fetcher = fetcher
+        self.transcriber = transcriber
+        self.transcribe_missing = transcribe_missing
+        self.engine = engine
+
+    def record(self, episode, outcome, reason):
+        """One episode's outcome, named the way a member would recognise it.
+
+        The `source` stays the URL — that is the attribution — but the log line
+        leads with the episode title, because "ep2.mp3" tells nobody which
+        episode of which show came back without words.
+        """
+        if episode.title:
+            reason = "“{}”: {}".format(episode.title, reason)
+        return self.manifest.add(Record(episode.source, outcome,
+                                        source_format=SOURCE_FORMAT, reason=reason))
 
 
 class Feed(object):
     """A show: what it is called, who makes it, and what is in it."""
 
-    def __init__(self, title="", author="", link="", url="", episodes=None):
+    def __init__(self, title="", author="", url="", episodes=None):
         self.title = title
         self.author = author
-        self.link = link
         self.url = url
         self.episodes = episodes or []
 
@@ -94,20 +123,21 @@ def ingest(targets, brain, limit=None, transcribe_missing=False,
            delay=DEFAULT_DELAY):
     """Ingest podcast `targets` into `brain`'s `raw/`. Never raises."""
     fetcher = fetcher or Fetcher(delay=delay)
-    transcriber = transcriber or _engine_transcriber(engine)
     store = RawStore(brain)
-    manifest = Manifest(store.brain)
+    run = Run(store=store, manifest=Manifest(store.brain), fetcher=fetcher,
+              transcriber=transcriber or transcribe.transcriber_for(engine),
+              transcribe_missing=transcribe_missing,
+              engine=transcribe.engine_for(engine))
 
     for target in targets:
-        feed = _load_feed(target, fetcher, manifest)
+        feed = _load_feed(target, fetcher, run.manifest)
         if feed is None:
             continue
         for episode in (feed.episodes[:limit] if limit else feed.episodes):
-            _ingest_episode(episode, feed, store, manifest, fetcher, transcriber,
-                            transcribe_missing, engine)
+            _ingest_episode(episode, feed, run)
 
-    log_manifest(store.brain, manifest, "podcast")
-    return manifest
+    log_manifest(store.brain, run.manifest, "podcast")
+    return run.manifest
 
 
 def estimate(targets, fetcher=None, limit=None, engine=transcribe.DEFAULT_ENGINE,
@@ -118,18 +148,25 @@ def estimate(targets, fetcher=None, limit=None, engine=transcribe.DEFAULT_ENGINE
     quote the member for work the build will not do. A published transcript that
     turns out to be dead does fall through to the engine at build time, and that
     is the one direction this estimate can be wrong in — under, never over.
+
+    A show that cannot be resolved is named rather than dropped: quoting "$0"
+    for a corpus that will fail at build time is the worst possible use of the
+    one gate where cost is stated.
     """
     fetcher = fetcher or Fetcher(delay=delay)
-    durations = []
+    durations, unpriced = [], []
     for target in targets:
         try:
             feed = parse_feed(fetcher(resolve_feed(target, fetcher)).text)
-        except (ResolveError, rights.RightsError, FetchError, ElementTree.ParseError):
+        except (ResolveError, rights.RightsError, FetchError,
+                ElementTree.ParseError) as failure:
+            unpriced.append("{} ({})".format(target, failure))
             continue
         for episode in (feed.episodes[:limit] if limit else feed.episodes):
             if not pick_transcript(episode.transcripts) and episode.enclosure_url:
                 durations.append(episode.duration)
-    return transcribe.estimate(durations, engine=engine)
+    return transcribe.Quote(transcribe.estimate(durations, engine=engine),
+                            unpriced=unpriced)
 
 
 def resolve_feed(target, fetcher):
@@ -170,11 +207,11 @@ def parse_feed(xml, url=""):
         raise ElementTree.ParseError("not an RSS feed")
     return Feed(title=_text(channel, "title"),
                 author=_text(channel, _ITUNES + "author") or _text(channel, "managingEditor"),
-                link=_text(channel, "link"), url=url,
-                episodes=[_episode(item) for item in channel.findall("item")])
+                url=url,
+                episodes=[_episode(item, url) for item in channel.findall("item")])
 
 
-def _episode(item):
+def _episode(item, feed_url=""):
     enclosure = item.find("enclosure")
     return Episode(
         title=_text(item, "title"), guid=_text(item, "guid"),
@@ -182,10 +219,10 @@ def _episode(item):
         duration=transcribe.parse_duration(_text(item, _ITUNES + "duration")),
         page_url=_text(item, "link"),
         enclosure_url=(enclosure.get("url") or "") if enclosure is not None else "",
-        enclosure_type=(enclosure.get("type") or "") if enclosure is not None else "",
         transcripts=[(node.get("url") or "", node.get("type") or "")
                      for node in item.findall(_PODCAST + "transcript")
-                     if node.get("url")])
+                     if node.get("url")],
+        feed_url=feed_url)
 
 
 def pick_transcript(transcripts):
@@ -214,54 +251,38 @@ def _load_feed(target, fetcher, manifest):
     return None
 
 
-def _ingest_episode(episode, feed, store, manifest, fetcher, transcriber,
-                    transcribe_missing, engine):
-    text, transcript = _published_transcript(episode, fetcher)
+def _ingest_episode(episode, feed, run):
+    text = _published_transcript(episode, run.fetcher)
+    provenance = {"transcript": "publisher"}
 
     if not text and not episode.enclosure_url:
-        return _record(manifest, episode, "failed",
-                       "no audio and no transcript in the feed — this reads as a "
-                       "platform exclusive, and there is no other way in")
+        return run.record(episode, "failed",
+                          "no audio and no transcript in the feed — this reads as a "
+                          "platform exclusive, and there is no other way in")
 
     if not text:
-        if not transcribe_missing:
-            return _record(manifest, episode, "empty",
-                           "no published transcript — re-run this arm with "
-                           "--transcribe to send the audio to the transcription "
-                           "engine instead")
-        text, failure = _transcribe(episode, fetcher, transcriber)
-        transcript = engine
+        if not run.transcribe_missing:
+            return run.record(episode, "empty",
+                              "no published transcript — re-run this arm with "
+                              "--transcribe to send the audio to the transcription "
+                              "engine instead")
+        text, failure = _transcribe(episode, run)
         if failure:
-            return _record(manifest, episode, "failed", failure)
+            return run.record(episode, "failed", failure)
+        provenance = {"transcript": run.engine.name, "caution": run.engine.caution}
 
     if caption_text.is_empty(text):
-        return _record(manifest, episode, "empty",
-                       "the transcript came back almost empty")
+        return run.record(episode, "empty", "the transcript came back almost empty")
 
-    already = store.duplicate_of(text)
+    already = run.store.duplicate_of(text)
     if already:
-        return _record(manifest, episode, "duplicate",
-                       "same text as {}".format(already))
+        return run.record(episode, "duplicate", "same text as {}".format(already))
 
-    raw = store.add(text, episode.title or episode.guid, source=episode.source,
-                    source_format=SOURCE_FORMAT, title=episode.title,
-                    author=feed.author or feed.title, published=episode.published,
-                    duration=episode.duration, transcript=transcript, show=feed.title)
-    return manifest.add(Record(episode.source, "ok", raw=raw, words=len(text.split()),
-                               source_format=SOURCE_FORMAT))
-
-
-def _record(manifest, episode, outcome, reason):
-    """One episode's outcome, named the way a member would recognise it.
-
-    The `source` stays the URL — that is the attribution — but the log line
-    leads with the episode title, because "ep2.mp3" tells nobody which episode
-    of which show came back without words.
-    """
-    if episode.title:
-        reason = "“{}”: {}".format(episode.title, reason)
-    return manifest.add(Record(episode.source, outcome, source_format=SOURCE_FORMAT,
-                               reason=reason))
+    return run.store.land(run.manifest, text, episode.title or episode.guid,
+                          episode.source, SOURCE_FORMAT, title=episode.title,
+                          author=feed.author or feed.title,
+                          published=episode.published, duration=episode.duration,
+                          show=feed.title, **provenance)
 
 
 def _published_transcript(episode, fetcher):
@@ -269,25 +290,30 @@ def _published_transcript(episode, fetcher):
 
     A transcript URL that 404s is not a failure — it is a reason to fall through
     to the next step in the ordering, which is exactly what the ordering is for.
+    The feed's declared type wins; the server's `Content-Type` is the fallback,
+    because feeds declare `application/octet-stream` at a real rate.
     """
     chosen = pick_transcript(episode.transcripts)
     if not chosen:
-        return "", ""
+        return ""
     url, mime = chosen
     try:
-        text = caption_text.clean(fetcher(url).text, caption_text.format_for(mime, url))
+        response = fetcher(url)
     except FetchError:
-        return "", ""
-    return ("", "") if caption_text.is_empty(text) else (text, "publisher")
+        return ""
+    fmt = caption_text.known_format(mime, url) or caption_text.format_for(
+        response.content_type, url)
+    text = caption_text.clean(response.text, fmt)
+    return "" if caption_text.is_empty(text) else text
 
 
-def _transcribe(episode, fetcher, transcriber):
+def _transcribe(episode, run):
     """Pull the enclosure and send it to the engine. Returns `(text, failure)`."""
     try:
         with tempfile.TemporaryDirectory(prefix="brain-audio-") as directory:
-            audio = fetcher.download(episode.enclosure_url, directory,
-                                     _media_name(episode))
-            return transcriber(audio), ""
+            audio = run.fetcher.download(episode.enclosure_url, directory,
+                                         _media_name(episode))
+            return run.transcriber(audio), ""
     except Exception as failure:
         return "", "transcription failed: {}".format(failure)
 
@@ -295,12 +321,6 @@ def _transcribe(episode, fetcher, transcriber):
 def _media_name(episode):
     extension = os.path.splitext(episode.enclosure_url.split("?")[0])[1] or ".mp3"
     return "episode" + extension
-
-
-def _engine_transcriber(engine):
-    def run(path):
-        return transcribe.transcribe(path, engine=engine)
-    return run
 
 
 def _text(node, tag):
@@ -343,16 +363,11 @@ def main(argv):
         sys.stderr.write(USAGE)
         return 2
 
-    manifest = ingest(targets, options["--into"], limit=limit,
-                      transcribe_missing=options["--transcribe"],
-                      engine=options["--engine"], delay=delay)
-    print(json.dumps(manifest.as_dict(), indent=2)
-          if options["--json"] else manifest.summary())
-    if manifest.whole_corpus_failed:
-        sys.stderr.write("ingest_podcast.py: no episode could be read — stop and talk "
-                         "to the member rather than building an empty brain\n")
-        return 1
-    return 0
+    return report(ingest(targets, options["--into"], limit=limit,
+                         transcribe_missing=options["--transcribe"],
+                         engine=options["--engine"], delay=delay),
+                  "ingest_podcast.py", "no episode could be read",
+                  as_json=options["--json"])
 
 
 if __name__ == "__main__":

@@ -22,8 +22,10 @@ Stdlib only.
 """
 import datetime
 import hashlib
+import json
 import os
 import re
+import sys
 
 import rights
 from brain_contract import parse_frontmatter
@@ -161,7 +163,12 @@ class RawStore(object):
         return self.seen_text.get(digest(text))
 
     def add(self, text, name_hint, source, source_format, **provenance):
-        """Write one attributed page and return its brain-relative path."""
+        """Write one attributed page and return its brain-relative path.
+
+        Raises `rights.RightsError` on material with nothing to attribute it to.
+        Arms land pages through `land()` rather than calling this directly, so
+        that refusal becomes a record instead of an exception.
+        """
         rights.require_attribution(dict(provenance, source=source,
                                         source_format=source_format))
         self.seen_text[digest(text)] = source
@@ -170,6 +177,23 @@ class RawStore(object):
         with open(os.path.join(self.raw_dir, name), "w", encoding="utf-8") as handle:
             handle.write(page)
         return "raw/" + name
+
+    def land(self, manifest, text, name_hint, source, source_format, **provenance):
+        """Write the page and record it — or record why it could not be written.
+
+        Every arm ends here, which is what keeps their promise identical: a
+        source either becomes an `ok` record with a `raw/` path, or a `failed`
+        one with the reason. Neither raises, because a network source with no
+        title, no page and no enclosure is a thing the real world produces, and
+        one of them must not take a build down.
+        """
+        try:
+            raw = self.add(text, name_hint, source, source_format, **provenance)
+        except (rights.RightsError, OSError) as failure:
+            return manifest.add(Record(source or name_hint, "failed",
+                                       source_format=source_format, reason=str(failure)))
+        return manifest.add(Record(source, "ok", raw=raw, words=len(text.split()),
+                                   source_format=source_format))
 
     def quarantine(self, text, name_hint, source, reason):
         """Park material the rights stance will not ingest, and say where.
@@ -225,6 +249,48 @@ def log_manifest(brain, manifest, label="ingest"):
             continue
         log_event(brain, "{} {}: {} — {}".format(
             label, record.outcome, record.source, record.reason))
+
+
+def walk_sources(paths):
+    """Every candidate file under `paths`, with the name it would be filed as.
+
+    Shared by the two arms that take paths rather than URLs: what counts as a
+    candidate is the same question for a folder of notes and a folder of books,
+    and only the extension decides which arm can read it. Hidden files and
+    Office lock files (`~$…`) are never candidates.
+    """
+    found = []
+    for source in paths:
+        source = os.path.abspath(os.path.expanduser(source))
+        if os.path.isfile(source):
+            found.append((source, os.path.basename(source)))
+            continue
+        for dirpath, dirnames, filenames in os.walk(source):
+            dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
+            for filename in sorted(filenames):
+                if filename.startswith(".") or filename.startswith("~$"):
+                    continue
+                path = os.path.join(dirpath, filename)
+                found.append((path, os.path.relpath(path, source)))
+    return found
+
+
+def report(manifest, script, nothing, as_json=False, stdout=None, stderr=None):
+    """Print an arm's manifest the one way every arm prints it, and exit-code it.
+
+    The five arms had five copies of this, which is five chances for one of them
+    to exit 0 on a corpus that produced nothing — the single condition that is
+    supposed to stop a build.
+    """
+    stdout = sys.stdout if stdout is None else stdout
+    stderr = sys.stderr if stderr is None else stderr
+    stdout.write((json.dumps(manifest.as_dict(), indent=2)
+                  if as_json else manifest.summary()) + "\n")
+    if manifest.whole_corpus_failed:
+        stderr.write("{}: {} — stop and talk to the member rather than building "
+                     "an empty brain\n".format(script, nothing))
+        return 1
+    return 0
 
 
 def _unique(stem, taken):

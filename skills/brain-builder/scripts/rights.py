@@ -99,7 +99,7 @@ def refusal_for_url(url):
     return DRM_HOSTS.get(host)
 
 
-def paywall_reason(text, url=""):
+def paywall_reason(text):
     """Why an extraction looks like a wall rather than an article, or `None`.
 
     An empty extraction is not a paywall — it is an empty extraction, and the

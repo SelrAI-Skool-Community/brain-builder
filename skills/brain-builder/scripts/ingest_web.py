@@ -21,14 +21,12 @@ silence. Exit 1 only when the whole corpus produced nothing.
 
 Stdlib only, plus trafilatura where a page is actually being read.
 """
-import json
-import os
 import sys
 
 import cli
 import rights
 from fetching import DEFAULT_DELAY, FetchError, Fetcher
-from raw_store import Manifest, RawStore, Record, log_manifest
+from raw_store import Manifest, RawStore, Record, log_manifest, report
 
 SOURCE_FORMAT = "web"
 
@@ -75,7 +73,7 @@ def _ingest_one(url, store, manifest, fetcher, extractor):
         return manifest.add(Record(url, "empty", source_format=SOURCE_FORMAT,
                                    reason="nothing readable was extracted from the page"))
 
-    walled = rights.paywall_reason(text, url)
+    walled = rights.paywall_reason(text)
     if walled:
         parked = store.quarantine(text, meta.get("title") or url, url, walled)
         return manifest.add(Record(url, "failed", source_format=SOURCE_FORMAT,
@@ -86,11 +84,12 @@ def _ingest_one(url, store, manifest, fetcher, extractor):
         return manifest.add(Record(url, "duplicate", source_format=SOURCE_FORMAT,
                                    reason="same text as {}".format(already)))
 
-    raw = store.add(text, meta.get("title") or url, source=url,
-                    source_format=SOURCE_FORMAT, title=meta.get("title"),
-                    author=meta.get("author"), published=meta.get("date"))
-    return manifest.add(Record(url, "ok", raw=raw, words=len(text.split()),
-                               source_format=SOURCE_FORMAT))
+    # Attribute to where the fetch actually landed: a syndication link that
+    # redirects to the publisher should cite the publisher, not the shortener.
+    landed = response.url or url
+    return store.land(manifest, text, meta.get("title") or landed, landed,
+                      SOURCE_FORMAT, title=meta.get("title"),
+                      author=meta.get("author"), published=meta.get("date"))
 
 
 def extract(html, url=""):
@@ -130,14 +129,8 @@ def main(argv):
         sys.stderr.write(USAGE)
         return 2
 
-    manifest = ingest(urls, options["--into"], delay=delay)
-    print(json.dumps(manifest.as_dict(), indent=2)
-          if options["--json"] else manifest.summary())
-    if manifest.whole_corpus_failed:
-        sys.stderr.write("ingest_web.py: no article could be read — stop and talk to "
-                         "the member rather than building an empty brain\n")
-        return 1
-    return 0
+    return report(ingest(urls, options["--into"], delay=delay), "ingest_web.py",
+                  "no article could be read", as_json=options["--json"])
 
 
 if __name__ == "__main__":

@@ -177,6 +177,21 @@ class TranscriptionFallback(YouTubeArm):
         self.ingest(downloader, transcribe_missing=True, transcriber=self.transcriber)
         self.assertEqual([], downloader.audio_asked)
 
+    def test_a_page_from_the_cheap_engine_carries_its_never_quote_caution(self):
+        """The warning has to reach the corpus, not just the docs."""
+        self.ingest(self.downloader([video("aaa")], captions={"aaa": ""}),
+                    transcribe_missing=True, transcriber=self.transcriber,
+                    engine="groq")
+        front, _, _ = parse_frontmatter(self.raw_text(self.raw_pages()[0]))
+        self.assertEqual("groq", front["transcript"])
+        self.assertIn("never quote", front["caution"])
+
+    def test_the_default_engine_has_no_caution_to_carry(self):
+        self.ingest(self.downloader([video("aaa")], captions={"aaa": ""}),
+                    transcribe_missing=True, transcriber=self.transcriber)
+        front, _, _ = parse_frontmatter(self.raw_text(self.raw_pages()[0]))
+        self.assertNotIn("caution", front)
+
     def test_a_failed_transcription_fails_loudly(self):
         def transcriber(path):
             raise RuntimeError("no ELEVENLABS_API_KEY in the environment")
@@ -242,6 +257,87 @@ class SelfUpdate(YouTubeArm):
 class _FakeYtDlp(object):
     class version(object):
         __version__ = "2026.08.01"
+
+
+class Listings(unittest.TestCase):
+    """A channel URL resolves to tabs, not to videos. Pure structure handling."""
+
+    def test_a_flat_video_result_is_one_video(self):
+        rows = ingest_youtube._flatten({"id": "aaa", "title": "One"})
+        self.assertEqual(["aaa"], [row["id"] for row in rows])
+
+    def test_a_playlist_of_videos_is_its_entries(self):
+        rows = ingest_youtube._flatten(
+            {"entries": [{"id": "aaa"}, {"id": "bbb"}]})
+        self.assertEqual(["aaa", "bbb"], [row["id"] for row in rows])
+
+    def test_a_channel_of_tabs_is_opened_down_to_the_videos(self):
+        rows = ingest_youtube._flatten({"entries": [
+            {"_type": "playlist", "id": "tab-videos",
+             "entries": [{"id": "aaa"}, {"id": "bbb"}]},
+            {"_type": "playlist", "id": "tab-shorts", "entries": [{"id": "ccc"}]}]})
+        self.assertEqual(["aaa", "bbb", "ccc"], [row["id"] for row in rows])
+
+    def test_an_entry_with_no_id_is_not_a_video(self):
+        self.assertEqual([], ingest_youtube._flatten({"entries": [{"title": "?"}]}))
+
+    def test_the_walk_is_bounded_rather_than_following_a_channel_graph(self):
+        deep = {"entries": [{"id": "aaa"}]}
+        for _ in range(5):
+            deep = {"_type": "playlist", "id": "x", "entries": [deep]}
+        self.assertEqual([], ingest_youtube._flatten(deep))
+
+
+class CaptionTracks(unittest.TestCase):
+    """yt-dlp writes one file per language; alphabetical order is not a preference."""
+
+    def test_plain_english_beats_a_regional_variant(self):
+        self.assertEqual("aaa.en.vtt",
+                         ingest_youtube._pick_track(["aaa.en-US.vtt", "aaa.en.vtt"]))
+
+    def test_a_known_variant_beats_an_unknown_language(self):
+        self.assertEqual("aaa.en-GB.vtt",
+                         ingest_youtube._pick_track(["aaa.de.vtt", "aaa.en-GB.vtt"]))
+
+    def test_no_tracks_at_all_is_nothing_rather_than_an_error(self):
+        self.assertIsNone(ingest_youtube._pick_track([]))
+
+
+class CookieRecipes(unittest.TestCase):
+    """The seed's ladder: cookies + JS, then cookies, then anonymous."""
+
+    def test_the_anonymous_recipe_is_last_so_the_others_are_tried_first(self):
+        self.assertEqual({"cookies": False, "js": False},
+                         ingest_youtube.CAPTION_RECIPES[-1])
+
+    def test_a_browser_is_assumed_because_the_bot_check_needs_one(self):
+        self.assertEqual("chrome",
+                         ingest_youtube.YtDlp(environ={}).cookies_from_browser)
+
+    def test_the_member_can_name_another_browser_or_opt_out_entirely(self):
+        self.assertEqual("firefox", ingest_youtube.YtDlp(
+            environ={"YT_COOKIES_FROM_BROWSER": "firefox"}).cookies_from_browser)
+        self.assertEqual("", ingest_youtube.YtDlp(
+            environ={"YT_COOKIES_FROM_BROWSER": "none"}).cookies_from_browser)
+
+
+class Estimating(YouTubeArm):
+    """Gate 2 needs a figure for video too, and an honest one about its shape."""
+
+    def test_the_estimate_is_the_ceiling_because_captions_are_usually_free(self):
+        downloader = self.downloader([video("aaa"), video("bbb")])
+        quote = ingest_youtube.estimate(["channel"], downloader=downloader)
+        self.assertEqual(3600, quote.seconds)
+        self.assertIn("ceiling", quote.line().lower())
+
+    def test_a_target_that_cannot_be_listed_is_named_rather_than_priced_at_zero(self):
+        class Broken(object):
+            def videos(self, target, limit=None):
+                raise RuntimeError("channel not found")
+
+        quote = ingest_youtube.estimate(["channel"], downloader=Broken())
+        self.assertEqual(0, quote.seconds)
+        self.assertIn("channel not found", quote.line())
 
 
 class MissingLibrary(YouTubeArm):

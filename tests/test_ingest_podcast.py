@@ -163,6 +163,20 @@ class FeedParsing(unittest.TestCase):
         self.assertEqual(3723, self.feed.episodes[0].duration)
         self.assertEqual(1800, self.feed.episodes[1].duration)
 
+    def test_a_transcript_the_feed_mistypes_is_read_by_what_the_server_calls_it(self):
+        """Feeds declare `application/octet-stream` at a real rate."""
+        feed = FEED.replace('type="text/vtt"', 'type="application/octet-stream"')
+        fetcher = StubFetcher({
+            "https://feeds.example.com/breadshow.xml": (feed, "application/rss+xml"),
+            "https://cdn.example.com/ep1.vtt": (TRANSCRIPT_VTT, "text/vtt")})
+        episode = ingest_podcast.parse_feed(feed).episodes[0]
+        self.assertIn("Hydration is the ratio",
+                      ingest_podcast._published_transcript(episode, fetcher))
+
+    def test_an_episode_with_nothing_to_attribute_it_to_falls_back_to_the_feed(self):
+        episode = ingest_podcast.Episode(feed_url="https://feeds.example.com/x.xml")
+        self.assertEqual("https://feeds.example.com/x.xml", episode.source)
+
     def test_a_transcript_type_the_kit_cannot_read_is_not_chosen(self):
         chosen = ingest_podcast.pick_transcript([("https://x/e.pdf", "application/pdf")])
         self.assertIsNone(chosen)
@@ -273,6 +287,18 @@ class TranscriptionFallback(PodcastArm):
         self.assertIn("ELEVENLABS_API_KEY", manifest.failed[0].reason)
 
 
+class CheapEngine(PodcastArm):
+    """Groq's caution has to reach the page it produced, not just the docs."""
+
+    def test_a_transcribed_page_carries_the_engines_never_quote_caution(self):
+        fetcher = self.fetcher(**{"https://cdn.example.com/ep1.mp3": ("", "audio/mpeg"),
+                                  "https://cdn.example.com/ep2.mp3": ("", "audio/mpeg")})
+        self.ingest(fetcher, transcribe_missing=True, engine="groq",
+                    transcriber=lambda path: "Shaping builds surface tension. " * 20)
+        fronts = [parse_frontmatter(self.raw_text(name))[0] for name in self.raw_pages()]
+        self.assertIn("never quote", fronts[0]["caution"])
+
+
 class Exclusives(PodcastArm):
     """A show with no audio in its feed is a dead end, and says so."""
 
@@ -290,6 +316,14 @@ class Estimating(PodcastArm):
         quote = ingest_podcast.estimate([self.FEED_URL], fetcher=self.fetcher())
         self.assertEqual(1800, quote.seconds)
         self.assertIn("$", quote.line())
+
+    def test_a_show_that_cannot_be_resolved_is_named_not_priced_at_zero(self):
+        """Quoting $0 for a corpus that will fail is the worst use of this gate."""
+        quote = ingest_podcast.estimate(["https://open.spotify.com/show/abc"],
+                                        fetcher=self.fetcher())
+        self.assertEqual(0, quote.seconds)
+        self.assertIn("Could not price", quote.line())
+        self.assertIn("spotify", quote.line().lower())
 
     def test_a_show_that_publishes_every_transcript_is_free(self):
         quote = ingest_podcast.estimate([self.FEED_URL],

@@ -49,10 +49,26 @@ _WORD = re.compile(r"[^\w']+")
 class Overlap(object):
     """How much two sources have in common, in the two ways that matter."""
 
-    def __init__(self, containment, jaccard, shared):
+    def __init__(self, containment, jaccard):
         self.containment = containment
         self.jaccard = jaccard
-        self.shared = shared
+
+    @classmethod
+    def between(cls, left, right):
+        """The overlap between two shingle sets. Empty sets share nothing."""
+        if not left or not right:
+            return cls(0.0, 0.0)
+        shared = len(left & right)
+        return cls(containment=shared / float(min(len(left), len(right))),
+                   jaccard=shared / float(len(left | right)))
+
+    def verdict(self, threshold):
+        """What kind of restating this is, or `None` if it is not restating."""
+        if self.jaccard >= threshold:
+            return "near-duplicate"
+        if self.containment >= threshold:
+            return "contained"
+        return None
 
 
 class Pair(object):
@@ -110,13 +126,7 @@ def shingles(text, size=SHINGLE_WORDS):
 
 def compare(first, second, size=SHINGLE_WORDS):
     """The overlap between two sources. Sources too short to shingle share nothing."""
-    left, right = shingles(first, size), shingles(second, size)
-    if not left or not right:
-        return Overlap(0.0, 0.0, 0)
-    shared = len(left & right)
-    return Overlap(containment=shared / float(min(len(left), len(right))),
-                   jaccard=shared / float(len(left | right)),
-                   shared=shared)
+    return Overlap.between(shingles(first, size), shingles(second, size))
 
 
 def find_near_duplicates(pages, threshold=DEFAULT_THRESHOLD, size=SHINGLE_WORDS):
@@ -125,12 +135,8 @@ def find_near_duplicates(pages, threshold=DEFAULT_THRESHOLD, size=SHINGLE_WORDS)
     pairs = []
     for index, (name, left) in enumerate(prepared):
         for other, right in prepared[index + 1:]:
-            if not left or not right:
-                continue
-            shared = len(left & right)
-            overlap = Overlap(containment=shared / float(min(len(left), len(right))),
-                              jaccard=shared / float(len(left | right)), shared=shared)
-            verdict = _verdict(overlap, threshold)
+            overlap = Overlap.between(left, right)
+            verdict = overlap.verdict(threshold)
             if not verdict:
                 continue
             smaller, larger = ((name, other) if len(left) <= len(right)
@@ -166,14 +172,6 @@ def read_raw(brain):
             _, body, _ = parse_frontmatter(handle.read())
         pages.append(("raw/" + name, body))
     return pages
-
-
-def _verdict(overlap, threshold):
-    if overlap.jaccard >= threshold:
-        return "near-duplicate"
-    if overlap.containment >= threshold:
-        return "contained"
-    return None
 
 
 # --- cli -------------------------------------------------------------------

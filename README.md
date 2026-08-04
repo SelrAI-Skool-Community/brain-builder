@@ -18,6 +18,8 @@ In build. When it ships, this repo carries the skill (`SKILL.md`), one paste-in 
 - `docs/rights.md` - the content-rights stance the kit is built to
 - `seed/` - prior assets the build reworks: the YouTube ingestion arm and an attach/detach prototype
 
+Brains attach globally or per project in skills-directory harnesses (Claude Code, Codex); harnesses that read an instruction file instead (OpenClaw, Gemini) are global-only in v1.
+
 ## What you're responsible for
 
 Brains are built locally, on your machine, from sources you have lawful access to, for your own use. The kit never ships content and your brains never leave your computer unless you move them. Details in `docs/rights.md`.

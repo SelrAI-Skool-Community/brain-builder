@@ -8,10 +8,12 @@ import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "skills", "brain-builder", "scripts")
+TOGGLE_SCRIPTS_DIR = os.path.join(REPO_ROOT, "skills", "brain-toggle", "scripts")
 FIXTURES_DIR = os.path.join(REPO_ROOT, "tests", "fixtures")
 
-if SCRIPTS_DIR not in sys.path:
-    sys.path.insert(0, SCRIPTS_DIR)
+for _scripts in (SCRIPTS_DIR, TOGGLE_SCRIPTS_DIR):
+    if _scripts not in sys.path:
+        sys.path.insert(0, _scripts)
 
 
 def flatten(text):

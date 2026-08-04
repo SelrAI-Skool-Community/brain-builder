@@ -47,10 +47,9 @@ $ python3 scripts/build_brain.py "$OUT" "cold email deliverability"
 ```
 
 **Phase 4b — fill (model reads the 8 transcripts, ~31k words)** and writes the
-synthesis, quote library and experts map. **Phase 5** syncs to gbrain if
-reachable. **Phase 6** reports:
+synthesis, quote library and experts map. **Phase 5** reports:
 
 > Built brain-cold-email-deliverability from 8 sources (2 hidden-gem creators
 > surfaced on engagement, not views), 8 transcripts, 14 attributed quotes.
-> Lives at ~/.claude/skills/brain-cold-email-deliverability/ and in the shared
-> gbrain. Ask about cold email deliverability in any new chat and it loads.
+> Lives at ~/.claude/skills/brain-cold-email-deliverability/. Ask about cold
+> email deliverability in any new chat and it loads.

@@ -9,14 +9,12 @@ description: >
   speak, write, or advise on that topic. Use when the user says "build a brain on
   X", "research the experts on Y", "what do the experts say about Z", "make me a
   brain about ...", "mine YouTube for the best on ...", or wants a durable,
-  attributed knowledge base on a subject. Builds local files that ship anywhere;
-  also syncs into the shared team brain (gbrain) when that's available.
+  attributed knowledge base on a subject. Builds local files that ship anywhere.
 metadata:
   type: builder
   version: 1.0.0
   built: "2026-05-28"
   engines: [yt-dlp, youtube-data-api, apify]
-  pairs-with: [content-engine, gbrain, build-my-brain]
 ---
 
 # Topic Brain Builder
@@ -109,15 +107,7 @@ into the stubs (replace every `<!-- FILL -->`):
 Be specific and attributed. No invented facts, no fluff. If a transcript is thin,
 skip it rather than padding.
 
-### Phase 5 — Sync to the shared brain (auto, internal only)
-Check `mcp__gbrain__whoami`. If it returns an identity with write scope:
-- `put_page` the synthesis as slug `brain/<slug>` (source `selrai-team`)
-- `put_page` the quote library and experts as linked pages
-- `add_link` between them; `add_tag` the topic
-So the team and agents can `recall`/`think` it. If gbrain isn't reachable (any
-attendee machine), skip silently — the local brain is the deliverable.
-
-### Phase 6 — Report
+### Phase 5 — Report
 One short summary: topic, # videos mined, popular-vs-hidden-gem split, # quotes,
 where the brain lives, and how to use it ("just ask about <topic> in a new chat,
 or load `brain-<slug>`"). Never end with a human-escalation line — if something
@@ -151,7 +141,4 @@ to 25. More videos = longer transcript synthesis.
 ## What you get
 
 A `brain-<topic>` skill: attributed synthesis + a quote library + an experts map
-+ the raw transcripts. Portable (works on any machine, no keys), and on Selr
-infra it also lives in the shared gbrain. Pairs with `content-engine` (voice gate
-when the brain feeds content) and complements `build-my-brain` (which designs a
-personal Postgres memory layer — different thing).
++ the raw transcripts. Portable — works on any machine, no keys, no services.

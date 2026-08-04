@@ -1,9 +1,10 @@
 # Brain Builder
 
 Turn any body of source material — YouTube channels, PDFs, books, web articles,
-podcasts, your own files — into a **brain**: a standalone folder of markdown
-your agent navigates like a wiki, answers from as a subject-matter expert, cites
-the page you would edit to fix an error, and admits what it does not know.
+podcasts, your own files — into a **brain**: a standalone folder of markdown your
+agent navigates like a wiki — small linked pages, one idea per page — answering
+as a subject-matter expert, citing the page you would edit to fix an error, and
+admitting what it does not know.
 
 Zero infrastructure. No RAG, no embeddings, no database, no server. Files only.
 
@@ -16,8 +17,9 @@ Paste this into Claude Code (or Codex, or any coding agent):
 > Clone https://github.com/luke-heka/brain-builder and follow SETUP-PROMPT.md
 
 That is the whole install. The agent clones the repo, links the two skills into
-your harness, verifies the machinery against a fixture brain without touching
-your real profile, and tells you it is ready. No dependencies, no API key, no
+whichever tool you use — Claude Code, Codex, or another agent — checks the
+machinery end to end against a sample brain without touching your real setup, and
+tells you it is ready. No dependencies, no API key, no
 network beyond the clone itself. `SETUP-PROMPT.md` is the complete path if you
 would rather read it first.
 
@@ -46,8 +48,9 @@ Retrieval is an agent reading files. That ceiling runs from the high hundreds to
 around 5,000 pages, far above any brain you will build, and it means a brain
 works standing alone on any machine with nothing installed.
 
-Attached brains cost roughly their router's description in idle context — about
-140 tokens. The body only loads when the router fires.
+An attached brain costs roughly its router's description in idle context — the
+one-line summary on its front page, about 140 tokens. The pages themselves only
+load when a question actually reaches for one.
 
 ## The three components
 

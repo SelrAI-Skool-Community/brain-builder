@@ -96,22 +96,34 @@ Source talk is safe and stays: members know what their own files, videos and
 podcasts are, and counts of them mean something. It is the machinery that needs
 translating.
 
+The right-hand column below is **register, not a script**: match its plainness
+and its level of explanation, then use the real numbers, paths and field names
+from the build in front of you. Never emit these lines verbatim.
+
 | Not this | This |
 |---|---|
 | "deciding the taxonomy" | "working out the map — which topics there are, and what belongs on each page" |
 | "one writer per cluster, in parallel" | "writing the sections at the same time, one per group of topics" |
 | "generating the router" | "writing its front page — the summary Claude reads to know when to open the brain and which page to go to" |
-| "running lint" / "lint clean" | "checking it over — every page reachable, every fact still naming its source. All clean." |
-| "the frontmatter is invalid" | "one page carried a setting the format doesn't allow — fixed" |
-| "attached to both harnesses" | "switched on for Claude Code — the tool you're using right now" |
+| "running lint" / "lint clean" | "checking it holds together — every page carrying the details it needs, every link going somewhere real. All clean." |
+| "the frontmatter is invalid" | "one page had `volatility: drifting` at the top, and that setting only takes `fast`, `slow` or `stable` — set it to `fast`" |
 | "the corpus" | "your material" / "the 86 sources" |
 | "OKF frontmatter with a `type`" | *nothing — this one is yours alone* |
 
+Note the frontmatter row: the fix is to **name the field, the bad value and the
+allowed ones** in words the member can follow — not to shrink it to "a setting
+was wrong". Explaining beats summarising every time.
+
 **Do not name other AI tools unless it is actually the member's situation.**
-Claude Code is the tool in front of them; Codex, Gemini and the rest come up only
-when they raise one by name, or when the brain genuinely landed in more than one
-and saying so is the honest answer. **"Harness" is never a word to use with a
-member** — say "the tool you're using", and name it.
+Claude Code is the tool in front of them, and **"harness" is never a word to use
+with a member** — say "the tool you're using", and name it. Codex, Gemini and the
+rest come up only in the three cases the `brain-toggle` skill lists: they raise
+one by name; the brain genuinely is on in more than one and the answer would be
+wrong without saying so; or they asked for an unusual install. So
+*"switched on for Claude Code — the tool you're using right now"* when it went to
+one, and *"switched on for Claude Code and for Codex — two separate tools on this
+machine, each with its own switch"* when it really did go to both. **Never report
+two as one**; under-reporting where a brain landed is a lie, not brevity.
 
 ## Phase 1 — Intake
 
@@ -275,7 +287,7 @@ the corpus was, and talk to the member. Never build an empty brain.
 **Close the phase with one line** covering every arm together, and let `log.md`
 hold the detail:
 
-> `↳ Read 86 sources (412,900 words) — 3 were empty, 2 were duplicates, 1 was paywalled and is set aside unused; 2 more repeat what other sources already say.`
+> `↳ Read 86 sources (412,900 words) — 3 were empty, 2 were duplicates, 1 was paywalled and is set aside unused. Another 2 are kept, but say the same thing as sources you already have.`
 
 **Taxonomy — one shared pass, before any page is written.** Read across the
 whole of `raw/` and decide the concept map for the brain in one pass: the pages,
@@ -283,7 +295,7 @@ their names, what belongs on each. This happens **before** any parallel work,
 because section agents that each invent their own taxonomy produce a wiki that
 overlaps in some places and dangles in others. Fix the map first; then fill it.
 
-> `↳ Mapped the ground: 11 topics, grouped into 3 areas — one page each.`
+> `↳ Mapped the ground: 11 topics, one page each, gathered into 3 areas.`
 
 Use `dedup_corpus.py`'s pairs here: where one source restates another, distil
 the claim **once** and cite the original. Four `raw/` pages saying the same
@@ -314,7 +326,7 @@ without its overlay is a subject brain wearing the name of a person.
   (lint holds them to it) and **are linked from `index.md`** like any other
   routed page.
 
-> `↳ Voice: 14 rules drawn from the material, plus 14 word-for-word examples.`
+> `↳ Voice: a short list of rules for how they talk, each one pointing at where it shows in the material, plus 14 word-for-word examples.`
 
 **`index.md` — a first-class step, not a formality.** The one-liners are what
 routing runs on, so **each one carries the page's actual numbers**, not a topic
@@ -336,7 +348,7 @@ python3 "$KIT/lint.py" <brain>         # skeleton, frontmatter, links, router
 Regenerating the router is a no-op diff, so fix anything lint reports and run
 both again without thinking about it.
 
-> `↳ Front page written, and the whole thing checks out — every page reachable, every fact naming its source.`
+> `↳ Front page written, and the whole thing checks out — every page carrying the details it needs, every link going somewhere real.`
 
 ## Phase 4 — Self-check
 

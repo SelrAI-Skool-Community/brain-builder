@@ -225,9 +225,9 @@ know the term.
   that is *"installed for Claude Code — a new session will have it, no restart"*
   and nothing about tools plural. Say "and Codex too" only if you installed there
   as well, and explain the pair once when you do.
-- **Say the clone has to stay put, and why**, in the same breath: *"the skills
-  are linked to this folder rather than copied, so a `git pull` updates them —
-  but move the folder and the links break."*
+- Step 3's two consequences, in the plain wording it asks for — *"the skills are
+  linked to this folder rather than copied, so a `git pull` updates them, but
+  move the folder and the links break"*, and no restart needed.
 - The checks passed — *"I ran it against a sample brain end to end and the full
   test suite: all green"*, not "fixture linted clean, router regenerated".
 - One example of how to start, in their words rather than a command:

@@ -6,9 +6,10 @@ description: "Turn a knowledge brain on or off for this machine's agent harnesse
 # Brain Toggle
 
 Turns a **brain** — a standalone folder of markdown pages — on and off for the AI
-tools installed on this machine. A brain that is on costs almost nothing until it
-is used: only its short front-page summary sits in context, and the pages
-themselves load when a question actually reaches for one.
+tools installed on this machine. A brain that is on costs roughly its router's
+`description` in idle context — that is, only the one-line summary on its front
+page sits there; the pages themselves load when a question actually reaches for
+one.
 
 Brains live anywhere; the default is `~/brains/<slug>/`. Every operation below
 runs through one script, `scripts/toggle.py`, which **sits next to this file**.
@@ -30,6 +31,13 @@ technical word you do use gets a short explanation the first time it appears, so
 the member finishes the exchange understanding the machine rather than trusting
 it blindly.
 
+This applies to what you **ask** as much as what you report: *"which brain, and
+on everywhere or only in this project?"*, never *"at which scope and harness?"*
+
+The right-hand column is **register, not a script** — match its plainness and its
+level of explanation, then use the real names and paths in front of you. Never
+emit these lines verbatim.
+
 | Not this | This |
 |---|---|
 | "attached to your Claude Code harness" | "turned on for Claude Code — the tool you're using right now" |
@@ -37,7 +45,7 @@ it blindly.
 | "attached at project scope" | "on only inside `~/work/acme`; other projects won't see it" |
 | "symlinked into the skills directory" | "linked in — the brain stays where it is at `~/brains/hormozi` and Claude follows a pointer to it, so nothing is copied or moved" |
 | "it costs its router description in idle context" | "it sits idle costing one line of summary; the pages only load when a question needs them" |
-| "run the linter first" | "check it over first — that every page is reachable and every fact still names its source" |
+| "run the linter first" | "check it over first — that every page carries the details it needs and every link goes somewhere real" |
 | "the link is broken" | "the link points at a folder that isn't there any more — the brain was moved or deleted" |
 
 **Hold back talk of other tools unless it is genuinely the member's problem.**
@@ -57,8 +65,11 @@ Claude Code and Codex — two separate tools on this machine, each with its own
 switch, so turning it off in one leaves the other alone."* Otherwise say Claude
 Code, or say nothing about tools at all.
 
-Everything below this line is mechanics — the vocabulary in it is for you, not
-for the member.
+The rest of this file is written in mechanics vocabulary — scope, harness,
+symlink, router — because that is the vocabulary you need to operate the script.
+**None of it is cleared for use with the member.** Where a section below quotes a
+line to say out loud, it has already been translated; everything else gets
+translated by you on the way out, under the rules above.
 
 ## The two arms
 
@@ -215,8 +226,8 @@ Rules, non-negotiable:
 
 `attach` checks the folder has the mandatory minimum (`SKILL.md`, `index.md`,
 `wiki/`) and refuses otherwise. For the full contract check, run the builder's
-linter first — to the member that is *"a check that every page is reachable and
-every fact still names the source it came from"*, not "a lint pass":
+linter first — to the member that is *"a check that every page carries the
+details it needs and every link goes somewhere real"*, not "a lint pass":
 
 ```bash
 python3 ~/.claude/skills/brain-builder/scripts/lint.py ~/brains/hormozi

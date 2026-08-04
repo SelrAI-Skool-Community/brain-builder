@@ -55,6 +55,7 @@ class IngestOnDisk(BrainOnDisk):
 
 
 class TextFiles(IngestOnDisk):
+    """md and txt, the plain cases — read as-is and attributed."""
 
     def test_markdown_and_text_files_land_in_raw_one_page_each(self):
         self.source("notes.md", "# Notes\n\nHydration runs at 70 %.\n")
@@ -195,9 +196,15 @@ class FailuresNeverHalt(IngestOnDisk):
 
         self.assertTrue(ingest([self.sources], self.brain).whole_corpus_failed)
 
-    def test_a_folder_of_only_unsupported_files_is_not_a_failed_corpus(self):
-        """Nothing was ever a candidate — that is a conversation, not a crash."""
+    def test_a_folder_this_arm_cannot_read_at_all_stops_the_build(self):
+        """A folder of PDFs is the likeliest miss — building an empty brain on it
+        would be worse than stopping and naming the arm it needs."""
         self.source("paper.pdf", "%PDF\n")
+        self.source("book.epub", "not readable here\n")
+        self.assertTrue(ingest([self.sources], self.brain).whole_corpus_failed)
+
+    def test_an_empty_folder_is_not_a_failed_corpus(self):
+        """Nothing was ever found — that is a conversation, not a crash."""
         self.assertFalse(ingest([self.sources], self.brain).whole_corpus_failed)
 
     def test_failures_are_written_to_the_brains_log(self):
@@ -219,6 +226,55 @@ class FailuresNeverHalt(IngestOnDisk):
 
         self.assertIn("1 sources ingested", summary)
         self.assertIn("1 empty", summary)
+
+
+class RawStaysImmutable(IngestOnDisk):
+    """`raw/` is immutable (spec.md §2) — a second run adds, never overwrites."""
+
+    def test_re_ingesting_the_same_folder_writes_nothing_new(self):
+        self.source("notes.md", "Material worth keeping.\n")
+        ingest([self.sources], self.brain)
+
+        manifest = ingest([self.sources], self.brain)
+
+        self.assertEqual([], manifest.ok)
+        self.assertEqual(1, len(manifest.duplicate))
+        self.assertEqual(["notes.md"], self.raw_pages())
+        self.assertIn("Material worth keeping.", self.raw_text("notes.md"))
+
+    def test_a_re_run_that_finds_only_material_it_already_has_is_not_a_failure(self):
+        """Everything is already in `raw/` — that is a no-op, not a dead corpus."""
+        self.source("notes.md", "Material worth keeping.\n")
+        ingest([self.sources], self.brain)
+
+        self.assertFalse(ingest([self.sources], self.brain).whole_corpus_failed)
+
+    def test_a_second_run_adds_new_material_alongside_the_old(self):
+        """Gate 1 is edited by talking, so re-running with more sources is normal."""
+        self.source("notes.md", "First material.\n")
+        ingest([self.sources], self.brain)
+        self.source("extra.md", "Second material.\n")
+
+        manifest = ingest([self.sources], self.brain)
+
+        self.assertEqual(1, len(manifest.ok))
+        self.assertEqual(["extra.md", "notes.md"], self.raw_pages())
+        self.assertIn("First material.", self.raw_text("notes.md"))
+
+    def test_a_different_file_with_a_taken_name_does_not_clobber_it(self):
+        self.source("notes.md", "The original material.\n")
+        ingest([self.sources], self.brain)
+
+        other = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(other)
+        with open(os.path.join(other, "notes.md"), "w", encoding="utf-8") as handle:
+            handle.write("Different material, same filename.\n")
+
+        ingest([other], self.brain)
+
+        self.assertEqual(["notes-2.md", "notes.md"], self.raw_pages())
+        self.assertIn("The original material.", self.raw_text("notes.md"))
+        self.assertIn("Different material", self.raw_text("notes-2.md"))
 
 
 class CommandLine(IngestOnDisk):

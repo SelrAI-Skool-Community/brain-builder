@@ -3,6 +3,24 @@
 
     python3 scaffold.py --title "<title>" [--slug <slug>] [--domain <text>]
                         [--kind subject] [--stance <stance>] [--at <dir>]
+    python3 scaffold.py --list-blueprints
+
+This module owns the mechanical half of a build's opening: where the brain goes,
+what shape it starts in, and what it says about itself. Two decisions are worth
+knowing about.
+
+  frontmatter first  `index.md` is written with its full frontmatter — `slug`,
+                     `title`, `domain`, `kind`, `stance` — before a single wiki
+                     page exists, because `gen_router.py` reads the brain's
+                     identity off exactly those fields. Deferring them would
+                     leave the brain unroutable until the last phase.
+  kinds are files    Blueprints are enumerated from `blueprints/` at runtime,
+                     and a blueprint's declared stance is what the brain is
+                     scaffolded with. Adding a kind is adding a file — no
+                     script and no skill is edited when the next one lands.
+
+It also owns `log.md` appends: this module creates that file, so it is also the
+one place that writes to it, and ingest failures land there through `log_event`.
 
 Stdlib only.
 """
@@ -12,10 +30,10 @@ import re
 import sys
 import unicodedata
 
-from brain_contract import parse_frontmatter
+import cli
+from brain_contract import DEFAULT_KIND, default_stance, parse_frontmatter
 
 BRAINS_HOME = "~/brains"
-DEFAULT_KIND = "subject"
 SLUG_MAX = 48
 SLUG_FALLBACK = "brain"
 
@@ -32,14 +50,6 @@ class Blueprint(object):
         self.summary = summary
         self.stance = stance
         self.path = path
-
-    def read(self):
-        """The full blueprint — read this before building, not before offering."""
-        with open(self.path, "r", encoding="utf-8") as handle:
-            return handle.read()
-
-    def __repr__(self):
-        return "Blueprint({!r})".format(self.kind)
 
 
 def list_blueprints(directory=BLUEPRINTS_DIR):
@@ -90,15 +100,17 @@ def derive_slug(title, max_length=SLUG_MAX):
 
 
 def scaffold_brain(title, at=BRAINS_HOME, slug=None, domain="", kind=DEFAULT_KIND,
-                   stance=None):
+                   stance=None, blueprints=BLUEPRINTS_DIR):
     """Create an empty brain of `kind` and return its absolute root.
 
-    Only the shape is written here. The one-liners, the wiki pages and the
-    router are the build's job — but the `index.md` frontmatter is written now,
-    in full, because `gen_router.py` reads the brain's identity off it and the
-    router cannot be generated until it is there.
+    Only the shape is written here — the one-liners, the wiki pages and the
+    router are the build's job. The stance is not asked for: it comes off the
+    blueprint for `kind`, so a blueprint that declares one gets it without any
+    caller passing it through. An explicit `stance` still wins, for the custom
+    shapes that are honoured on opt-out.
     """
     slug = slug or derive_slug(title)
+    stance = stance or blueprint_stance(kind, blueprints)
     root = os.path.join(os.path.abspath(os.path.expanduser(at)), slug)
     if os.path.exists(root):
         raise FileExistsError("{}: already exists — pick another slug, or build "
@@ -106,16 +118,23 @@ def scaffold_brain(title, at=BRAINS_HOME, slug=None, domain="", kind=DEFAULT_KIN
 
     os.makedirs(os.path.join(root, "wiki"))
     os.makedirs(os.path.join(root, "raw"))
-    _write(root, "index.md", _index(slug, title, _one_line(domain), kind,
-                                    stance or default_stance(kind)))
-    _write(root, "log.md", _log(title))
+    _write(root, "index.md", _index(slug, title, _one_line(domain), kind, stance))
+    _write(root, "log.md", _log_page(title))
     _write(root, "CHANGELOG.md", _changelog(title))
     return root
 
 
-def default_stance(kind):
-    """Absent a blueprint's own declaration, only a persona speaks as someone."""
-    return "persona" if kind == "persona" else "advisor"
+def blueprint_stance(kind, directory=BLUEPRINTS_DIR):
+    """The stance the blueprint for `kind` declares, or the contract's default.
+
+    Reading it from the file is what makes a new kind a one-file change: a
+    blueprint that declares `stance: coach` scaffolds a coach brain, and the
+    router renders it, without a line of this script changing.
+    """
+    for blueprint in list_blueprints(directory):
+        if blueprint.kind == kind:
+            return blueprint.stance
+    return default_stance(kind)
 
 
 def log_event(root, message):
@@ -172,7 +191,7 @@ def _index(slug, title, domain, kind, stance):
     ).format(slug=slug, title=title, domain=domain or title, kind=kind, stance=stance)
 
 
-def _log(title):
+def _log_page(title):
     return (
         "---\n"
         "type: log\n"
@@ -195,23 +214,21 @@ USAGE = ("usage: scaffold.py --title <title> [--slug <slug>] [--domain <text>]\n
 
 
 def main(argv):
-    options = {"--title": None, "--slug": None, "--domain": "",
-               "--kind": DEFAULT_KIND, "--stance": None, "--at": BRAINS_HOME}
-    pending = iter(argv[1:])
-    for arg in pending:
-        name, _, inline = arg.partition("=")
-        if name == "--list-blueprints":
-            for blueprint in list_blueprints():
-                print("{}\t{}".format(blueprint.kind, blueprint.summary))
-            return 0
-        if name not in options:
-            sys.stderr.write("scaffold.py: unknown argument {}\n{}".format(arg, USAGE))
-            return 2
-        value = inline if inline else next(pending, None)
-        if value is None:
-            sys.stderr.write("scaffold.py: {} needs a value\n".format(name))
-            return 2
-        options[name] = value
+    try:
+        _, options = cli.scan(
+            argv,
+            options={"--title": None, "--slug": None, "--domain": "",
+                     "--kind": DEFAULT_KIND, "--stance": None, "--at": BRAINS_HOME,
+                     "--list-blueprints": False},
+            flags=("--list-blueprints",))
+    except cli.UsageError as failure:
+        sys.stderr.write("scaffold.py: {}\n{}".format(failure, USAGE))
+        return 2
+
+    if options["--list-blueprints"]:
+        for blueprint in list_blueprints():
+            print("{}\t{}".format(blueprint.kind, blueprint.summary))
+        return 0
 
     if not options["--title"]:
         sys.stderr.write(USAGE)

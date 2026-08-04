@@ -156,11 +156,16 @@ python3 scripts/ingest_local.py <paths…> --into <brain> --json
 ```
 
 `scaffold.py` writes the skeleton and — importantly — the `index.md` frontmatter
-the router generator reads. `ingest_local.py` returns counts and never raises:
-dead, empty, duplicate and unreadable files are recorded in the manifest and
-appended to `log.md`, and the build carries on. It exits non-zero only when
-**nothing** could be read; that is the single condition that stops a build, and
-it is a conversation with the member, not a crash.
+the router generator reads, including the stance taken from the blueprint.
+`ingest_local.py` returns counts and never raises: dead, empty, duplicate and
+unreadable files are recorded in the manifest and appended to `log.md`, and the
+build carries on. Re-running it after a Gate 1 edit adds material rather than
+overwriting any — `raw/` is immutable.
+
+It exits non-zero only when **nothing** came out of the corpus; that is the
+single condition that stops a build. A folder whose files this arm cannot read —
+all PDFs, say — counts as exactly that. Stop, say which arm it needs, and talk to
+the member. Never build an empty brain.
 
 > `↳ Ingested 34 sources (128,400 words) — 2 empty, 1 duplicate.`
 
@@ -187,9 +192,11 @@ more" routes; "Hydration — about hydration" does not. Leave the frontmatter
 `scaffold.py` wrote intact: `slug`, `title`, `domain`, `kind` and `stance` are
 what `gen_router.py` reads, and the router cannot be generated without them.
 
-**Router, then lint** — in that order, because the router *is* part of the
-brain: `lint.py` checks that `SKILL.md` exists and that its frontmatter can fire,
-so linting before generating it always fails on the brain's own front door.
+**Router, then lint.** The spec lists the phases as `… → lint → router`
+(spec.md §5); in practice they run the other way round, because the router *is*
+part of the brain — `lint.py` checks that `SKILL.md` exists and that its
+frontmatter can fire, so linting first always fails on the brain's own front
+door. Lint still closes the build, which is what that ordering was protecting.
 
 ```bash
 python3 scripts/gen_router.py <brain>   # reads index.md frontmatter

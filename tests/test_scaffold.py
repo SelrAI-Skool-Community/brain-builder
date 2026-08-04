@@ -5,11 +5,10 @@ talks its way through intake and synthesis; everything deterministic about
 *where the brain goes* and *what shape it starts in* lives here, so the model
 never has to reinvent it mid-build.
 """
-import unittest
-
 import contextlib
 import io
 import os
+import unittest
 
 from brainkit import BrainOnDisk, flatten
 
@@ -147,6 +146,24 @@ class Skeleton(BrainOnDisk):
         for relpath in ("index.md", "log.md", "CHANGELOG.md", "wiki", "raw"):
             with self.subTest(part=relpath):
                 self.assertTrue(os.path.exists(os.path.join(root, relpath)))
+
+    def test_a_blueprints_declared_stance_is_what_the_brain_is_built_with(self):
+        """Adding a kind is adding a file — including the stance it answers in."""
+        blueprints = os.path.join(self.tmp, "blueprints")
+        os.makedirs(blueprints)
+        with open(os.path.join(blueprints, "coach.md"), "w", encoding="utf-8") as handle:
+            handle.write("---\nkind: coach\nsummary: A coaching shape.\n"
+                         "stance: coach\n---\n\n# Coach\n")
+
+        root = self.scaffold(kind="coach", blueprints=blueprints)
+
+        meta = read_brain_meta(root)
+        self.assertEqual("coach", meta.kind)
+        self.assertEqual("coach", meta.stance)
+
+    def test_an_explicit_stance_still_wins_for_a_custom_shape(self):
+        root = self.scaffold(kind="subject", stance="persona")
+        self.assertEqual("persona", read_brain_meta(root).stance)
 
     def test_the_index_carries_the_frontmatter_the_router_generator_reads(self):
         """CORE-146 decision: router metadata comes off index.md frontmatter."""

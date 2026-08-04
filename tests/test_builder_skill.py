@@ -26,6 +26,7 @@ def skill_text():
 
 
 class SkillFrontmatter(unittest.TestCase):
+    """The metadata that decides whether the skill ever fires at all."""
 
     def setUp(self):
         self.front, self.body, self.present = parse_frontmatter(skill_text())

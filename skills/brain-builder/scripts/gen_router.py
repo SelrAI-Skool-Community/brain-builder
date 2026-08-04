@@ -33,9 +33,8 @@ Stdlib only.
 import os
 import sys
 
-from brain_contract import OVERLAY_DIRS, read_page
+from brain_contract import DEFAULT_KIND, OVERLAY_DIRS, default_stance, read_page
 
-DEFAULT_KIND = "subject"
 PERSONA_OVERLAY, STANDING_OVERLAY = OVERLAY_DIRS
 
 
@@ -90,11 +89,7 @@ def read_brain_meta(root, kind=None, recorded_root=None):
 
 def _resolve_stance(declared, kind, overlays):
     """A declared stance always wins — stances are extensible, not a cap of two."""
-    if declared:
-        return declared
-    if kind == "persona" or PERSONA_OVERLAY in overlays:
-        return "persona"
-    return "advisor"
+    return declared or default_stance(kind, overlays)
 
 
 def _text(value):

@@ -280,14 +280,25 @@ class FreshCloneInstall(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("valid brain — 0 error(s), 0 warning(s)", result.stdout)
 
-    def test_step_4_regenerates_the_router_as_a_byte_for_byte_no_op(self):
+    def test_step_4_regenerates_the_router_and_records_where_the_brain_now_is(self):
+        """A copied brain is a moved brain, and the router records its root."""
         brain = self.brain()
         router = os.path.join(brain, "SKILL.md")
-        before = read(router)
+        self.assertIn("brain_root: ~/brains/" + FIXTURE, read(router))
+
         result = run(os.path.join(self.builder, "gen_router.py"), brain)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(router, result.stdout.strip())
-        self.assertEqual(before, read(router))
+        self.assertIn("brain_root: " + brain, read(router))
+
+    def test_step_4_regeneration_in_place_is_a_no_op_diff(self):
+        """No timestamps in the output, so the second run changes nothing."""
+        brain = self.brain()
+        router = os.path.join(brain, "SKILL.md")
+        run(os.path.join(self.builder, "gen_router.py"), brain)
+        once = read(router)
+        run(os.path.join(self.builder, "gen_router.py"), brain)
+        self.assertEqual(once, read(router))
 
     def test_step_4_attaches_lists_and_detaches_without_touching_the_real_home(self):
         brain = self.brain()

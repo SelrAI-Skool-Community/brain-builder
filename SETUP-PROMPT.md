@@ -105,7 +105,7 @@ cp -R tests/fixtures/sourdough-baking "$TMP/sourdough-baking"
 # the contract check: skeleton, frontmatter, links, router
 python3 skills/brain-builder/scripts/lint.py "$TMP/sourdough-baking"
 
-# regenerate the router — re-running is a byte-for-byte no-op
+# regenerate the router — it records the brain's root, so run it before attaching
 python3 skills/brain-builder/scripts/gen_router.py "$TMP/sourdough-baking"
 
 # attach / list / detach against a fake home, so ~/.claude is never written to
@@ -120,7 +120,11 @@ What a healthy run looks like:
 
 - `lint.py` prints one line ending `valid brain — 0 error(s), 0 warning(s)` and
   exits 0. Errors exit 1; warnings never do.
-- `gen_router.py` prints the absolute path of the `SKILL.md` it wrote.
+- `gen_router.py` prints the absolute path of the `SKILL.md` it wrote. Run twice
+  in the same place it is a no-op diff; run on a brain that has *moved* it
+  re-records the new root, which is why it comes before `attach` here. (Attach a
+  brain whose router still records an old root and you get a `warning:` line
+  naming the fix — that is the mechanism working, not a fault.)
 - `attach` prints `target: …` then `attached … -> …`; `list` shows the brain
   under the fake home; `detach` prints `detached …`.
 

@@ -21,15 +21,17 @@ from brainkit import BrainOnDisk
 import open_in_obsidian as obsidian
 
 
-def machine(system="macos", home="/home/member", files=(), tools=(), replies=None,
+def machine(system="macos", home="/home/member", files=None, tools=(), replies=None,
             **kwargs):
     """A pretend computer: what exists, what is installed, what commands say."""
     replies = dict(replies or {})
+    kwargs.setdefault("environ", {})
 
     def runner(argv):
         return replies.get(argv[0], (0, ""))
 
-    return obsidian.Machine(system=system, home=home, files=list(files),
+    return obsidian.Machine(system=system, home=home,
+                            files=None if files is None else list(files),
                             tools=list(tools), runner=runner, **kwargs)
 
 
@@ -79,12 +81,12 @@ class Detection(unittest.TestCase):
     def test_macos_falls_back_to_spotlight_before_giving_up(self):
         """Members drag it anywhere; `mdfind` is how the OS answers that."""
         self.assertTrue(obsidian.installed(machine(
-            "macos", tools=["mdfind"],
+            "macos", files=[], tools=["mdfind"],
             replies={"mdfind": (0, "/Users/m/Dev/Obsidian.app\n")})))
 
     def test_spotlight_finding_nothing_is_not_an_install(self):
         self.assertFalse(obsidian.installed(machine(
-            "macos", tools=["mdfind"], replies={"mdfind": (0, "\n")})))
+            "macos", files=[], tools=["mdfind"], replies={"mdfind": (0, "\n")})))
 
     def test_windows_sees_the_per_user_install(self):
         found = machine("windows", home="C:\\Users\\m",
@@ -94,12 +96,12 @@ class Detection(unittest.TestCase):
 
     def test_windows_asks_winget_when_no_exe_is_where_it_should_be(self):
         self.assertTrue(obsidian.installed(machine(
-            "windows", tools=["winget"],
+            "windows", files=[], tools=["winget"],
             replies={"winget": (0, "Obsidian  Obsidian.Obsidian  1.5.3\n")})))
 
     def test_winget_reporting_no_package_is_not_an_install(self):
         self.assertFalse(obsidian.installed(machine(
-            "windows", tools=["winget"],
+            "windows", files=[], tools=["winget"],
             replies={"winget": (1, "No installed package found\n")})))
 
     def test_linux_sees_it_on_the_path(self):
@@ -111,9 +113,9 @@ class Detection(unittest.TestCase):
             replies={"flatpak": (0, "md.obsidian.Obsidian\n")})))
 
     def test_a_machine_with_none_of_it_says_so(self):
-        self.assertFalse(obsidian.installed(machine("macos")))
-        self.assertFalse(obsidian.installed(machine("linux")))
-        self.assertFalse(obsidian.installed(machine("windows")))
+        self.assertFalse(obsidian.installed(machine("macos", files=[])))
+        self.assertFalse(obsidian.installed(machine("linux", files=[])))
+        self.assertFalse(obsidian.installed(machine("windows", files=[])))
 
     def test_an_unknown_operating_system_is_not_guessed_at(self):
         self.assertFalse(obsidian.installed(machine("plan9")))
@@ -138,8 +140,8 @@ class Installers(unittest.TestCase):
         self.assertIn("md.obsidian.Obsidian", route.argv)
 
     def test_no_package_manager_means_no_route_rather_than_a_guess(self):
-        self.assertIsNone(obsidian.installer(machine("macos")))
-        self.assertIsNone(obsidian.installer(machine("linux")))
+        self.assertIsNone(obsidian.installer(machine("macos", files=[])))
+        self.assertIsNone(obsidian.installer(machine("linux", files=[])))
         self.assertIsNone(obsidian.installer(machine("plan9", tools=["brew"])))
 
 
@@ -251,10 +253,10 @@ class VaultRegistry(BrainOnDisk):
         self.assertEqual({"channel": "stable"}, payload["updates"])
         self.assertEqual(1, len(payload["vaults"]))
 
-    def test_a_dry_run_reports_what_it_would_do_and_writes_nothing(self):
+    def test_a_look_only_machine_reports_what_it_would_do_and_writes_nothing(self):
+        """The seam `--check` runs on: the same answer, none of the write."""
         brain = self.minimal_brain()
-        found = self.registry({"vaults": {}})
-        found.dry = True
+        found = self.registry({"vaults": {}}).readonly()
         self.assertEqual("added", obsidian.register(brain, found))
         self.assertEqual({}, self.vaults(found))
 
@@ -270,14 +272,14 @@ class TheReveal(BrainOnDisk):
         with open(os.path.join(directory, "obsidian.json"), "w",
                   encoding="utf-8") as handle:
             handle.write('{"vaults": {}}')
-        kwargs.setdefault("files", ["/Applications/Obsidian.app"])
+        kwargs.setdefault("files", ["/Applications/Obsidian.app",
+                                    os.path.join(directory, "obsidian.json")])
         return machine("macos", home=home, **kwargs)
 
     def test_an_installed_obsidian_gets_the_vault_registered_and_opened(self):
         brain = self.minimal_brain()
         found = self.ready()
         reveal = obsidian.reveal(brain, found)
-        self.assertTrue(reveal.ok)
         self.assertTrue(reveal.installed)
         self.assertFalse(reveal.installed_now)
         self.assertEqual("added", reveal.vault)
@@ -299,7 +301,6 @@ class TheReveal(BrainOnDisk):
         found = self.ready(files=[], tools=["brew"],
                            replies={"brew": (1, "could not download\n")})
         reveal = obsidian.reveal(brain, found)
-        self.assertFalse(reveal.ok)
         self.assertFalse(reveal.opened)
         self.assertIn(obsidian.DOWNLOAD, " ".join(reveal.trouble))
 
@@ -314,19 +315,11 @@ class TheReveal(BrainOnDisk):
         self.assertIn(obsidian.DOWNLOAD, trouble)
         self.assertIn("vault", trouble.lower())
 
-    def test_installing_can_be_declined_and_then_nothing_is_installed(self):
-        brain = self.minimal_brain()
-        found = self.ready(files=[], tools=["brew"])
-        reveal = obsidian.reveal(brain, found, install=False)
-        self.assertEqual([], found.commands)
-        self.assertIn(obsidian.DOWNLOAD, " ".join(reveal.trouble))
-
     def test_a_launcher_that_fails_still_returns_a_reveal(self):
         brain = self.minimal_brain()
         found = self.ready(replies={"open": (1, "")})
         reveal = obsidian.reveal(brain, found)
         self.assertFalse(reveal.opened)
-        self.assertFalse(reveal.ok)
         self.assertTrue(reveal.trouble)
 
     def test_a_launcher_that_explodes_is_caught_rather_than_raised(self):
@@ -366,12 +359,11 @@ class TheReveal(BrainOnDisk):
         self.assertTrue(reveal.opened)
         self.assertIn("vault", " ".join(reveal.trouble).lower())
 
-    def test_a_dry_run_touches_nothing_and_launches_nothing(self):
+    def test_a_look_only_machine_records_the_launch_without_making_it(self):
+        """The seam that keeps this suite from opening an app or writing a config."""
         brain = self.minimal_brain()
-        found = self.ready()
-        found.dry = True
-        reveal = obsidian.reveal(brain, found)
-        self.assertTrue(reveal.dry)
+        found = self.ready().readonly()
+        obsidian.reveal(brain, found)
         self.assertEqual([["open", obsidian.vault_uri(brain)]], found.commands)
         with open(obsidian.registry_path(found), encoding="utf-8") as handle:
             self.assertEqual({}, json.load(handle)["vaults"])
@@ -398,7 +390,7 @@ class Checking(BrainOnDisk):
     def test_it_reports_state_without_installing_registering_or_opening(self):
         brain = self.minimal_brain()
         found = machine("macos", home=os.path.join(self.tmp, "fresh"),
-                        tools=["brew"])
+                        files=[], tools=["brew"])
         state = obsidian.inspect(brain, found)
         self.assertEqual([], found.commands)
         self.assertEqual(False, state["installed"])
@@ -414,7 +406,9 @@ class Checking(BrainOnDisk):
         with open(os.path.join(directory, "obsidian.json"), "w",
                   encoding="utf-8") as handle:
             json.dump({"vaults": {"dddddddddddddddd": {"path": brain, "ts": 2}}}, handle)
-        state = obsidian.inspect(brain, machine("macos", home=home))
+        state = obsidian.inspect(brain, machine(
+            "macos", home=home,
+            files=[os.path.join(directory, "obsidian.json")]))
         self.assertEqual("registered", state["vault"])
 
 
@@ -440,18 +434,22 @@ class TheCli(BrainOnDisk):
         result = self.run_it(os.path.join(self.tmp, "nope"))
         self.assertEqual(2, result.returncode)
 
-    def test_check_prints_json_and_runs_no_commands(self):
-        result = self.run_it(self.minimal_brain(), "--check")
+    def test_check_prints_json_and_changes_nothing(self):
+        """`--home` keeps it off the real config — the toggle skill's convention."""
+        home = os.path.join(self.tmp, "home")
+        os.makedirs(home)
+        result = self.run_it(self.minimal_brain(), "--check", "--home", home)
         self.assertEqual(0, result.returncode)
         state = json.loads(result.stdout)
+        self.assertEqual("absent", state["vault"])
         self.assertIn("installed", state)
-        self.assertIn("vault", state)
+        self.assertEqual([], os.listdir(home))
 
-    def test_a_dry_run_reports_without_installing_or_launching_anything(self):
-        result = self.run_it(self.minimal_brain(), "--dry-run", "--json")
-        self.assertEqual(0, result.returncode)
-        payload = json.loads(result.stdout)
-        self.assertTrue(payload["dry"])
+    def test_a_home_relative_brain_path_is_expanded_like_every_other_script(self):
+        """SKILL.md quotes `~/brains/<slug>` — a script that cannot read one is broken."""
+        result = self.run_it("~/definitely-not-a-brain-here", "--check")
+        self.assertEqual(2, result.returncode)
+        self.assertNotIn("~", result.stderr.split("usage")[0])
 
 
 if __name__ == "__main__":

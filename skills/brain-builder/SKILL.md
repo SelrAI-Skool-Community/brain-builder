@@ -390,20 +390,22 @@ seen it work.
    member see their own material as a map of connected dots.
 
    ```bash
+   python3 "$KIT/open_in_obsidian.py" <brain> --check  # look first, changes nothing
    python3 "$KIT/open_in_obsidian.py" <brain>          # installs if needed, then opens
-   python3 "$KIT/open_in_obsidian.py" <brain> --check  # state only, changes nothing
    ```
 
-   It adds the brain folder to Obsidian as a *vault* — Obsidian's word for a
-   folder it reads — and opens it. If Obsidian is not on the machine it installs
-   it, and **you say that first, in one line, before you run it**: *"Installing
-   Obsidian — a free app that shows your brain as a visual map of linked
-   pages."* Never install anything silently.
+   **Look first, because the second command may install something.** `--check`
+   answers `installed` and `installer`. If `installed` is `false`, say the line
+   *before* you run the second command — *"Installing Obsidian — a free app that
+   shows your brain as a visual map of linked pages"* — and then run it. Never
+   install anything silently. If `installed` is `true` there is nothing to
+   announce; just open it.
 
-   Opening the vault is all that can be automated. There is no link that goes
-   straight to the picture, so **name the one click**: *"press Cmd+G — Ctrl+G on
-   Windows and Linux — or the graph icon down the left side, and you'll see
-   every page and every link between them."*
+   Opening adds the brain folder to Obsidian as a *vault* — Obsidian's word for
+   a folder it reads — and shows it. That is all that can be automated: there is
+   no link that goes straight to the picture, so **name the one click**:
+   *"press Cmd+G — Ctrl+G on Windows and Linux — or the graph icon down the left
+   side, and you'll see every page and every link between them."*
 
    **This cannot fail the build.** When it can't open — no way to install, no
    Obsidian, a launch that didn't take — it exits 1 and prints what to do

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """The closing beat of a build: the brain, opened as a picture of itself.
 
-    python3 open_in_obsidian.py <brain> [--json] [--no-install] [--dry-run]
-    python3 open_in_obsidian.py <brain> --check [--json]
+    python3 open_in_obsidian.py <brain> [--json] [--home DIR]
+    python3 open_in_obsidian.py <brain> --check [--json] [--home DIR]
 
 A brain is a folder of linked markdown, which is exactly what Obsidian draws —
 so the last thing a member sees is not a file listing but their own material as
 a graph of connected pages. That picture is the proof the wiki is a wiki.
 
-**This step is a garnish and behaves like one.** Nothing here can fail a build:
-every path that does not work comes back as a `Reveal` carrying a line the
-member can act on, never as an exception and never as a non-zero exit that
-reads like the brain is broken. The one hard failure is bad arguments.
+**This step is a garnish and behaves like one.** Nothing here can fail a build.
+Every path that does not work comes back as a `Reveal` carrying a line the
+member can act on, never as an exception. The exit code says only whether
+Obsidian opened — a 1 means the picture is missing, never that the brain is
+wrong, and the skill turns it into one calm line. Bad arguments are the one
+hard failure, and exit 2 like every other script here.
 
 **What is automated, and what is not.** Obsidian's URI scheme documents
 `open`, `new`, `daily`, `unique`, `search` and `choose-vault` — and no action
@@ -36,9 +38,10 @@ One honest caveat, stated here rather than discovered: Obsidian rewrites
 already running may be dropped at exit. Opening again re-registers it.
 
 Stdlib only. Every piece of the outside world — the OS name, the home
-directory, what exists on disk, what is on `PATH`, and anything that runs a
-command — arrives through one `Machine`, so the whole module is testable
-without installing software or launching an app.
+directory, the environment, what exists on disk, what is on `PATH`, reading and
+writing the config, and anything that runs a command — arrives through one
+`Machine`, so the whole module is testable without installing software,
+launching an app, or reading the real Obsidian config.
 """
 import hashlib
 import json
@@ -61,15 +64,16 @@ _APP_ID = "md.obsidian.Obsidian"
 
 
 class Machine(object):
-    """This computer, as the reveal sees it.
+    """This computer, as the reveal sees it — and the only way out of the module.
 
-    Five things and no more: which OS, where home is, the environment, what is
-    on disk, what is on `PATH`, and something that runs a command. `files` and
-    `tools` default to asking the real machine; a test hands in lists instead.
+    Which OS, where home is, the environment, what is on disk, what is on
+    `PATH`, and something that runs commands. `files` and `tools` default to
+    asking the real machine; a test hands in lists instead, and then nothing
+    here can see past them.
 
     `dry` suppresses only what changes the machine — the install, the config
-    write, the launch. Detection still runs, because a dry run that lies about
-    whether Obsidian is installed is worth less than no dry run at all.
+    write, the launch. Detection still runs, because a look that lies about
+    whether Obsidian is installed is worth less than no look at all.
     """
 
     def __init__(self, system=None, home=None, environ=None, files=None,
@@ -99,9 +103,9 @@ class Machine(object):
     def exists(self, path):
         if self._files is None:
             return os.path.exists(path)
-        #: A fake filesystem is compared separator-blind: `os.path.join` uses the
-        #: separator of the machine running the test, not of the machine being
-        #: described, and a Windows path is a Windows path either way.
+        # A fake filesystem is compared separator-blind: `os.path.join` uses the
+        # separator of the machine running the test, not of the machine being
+        # described, and a Windows path is a Windows path either way.
         return _flat(path) in {_flat(known) for known in self._files}
 
     def has(self, tool):
@@ -109,6 +113,27 @@ class Machine(object):
         if self._tools is None:
             return bool(shutil.which(tool))
         return tool in self._tools
+
+    def read(self, path):
+        """The text of a file, or `None` when it cannot be read at all."""
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    def write(self, path, text):
+        """Replace a file in one step, so a crash cannot truncate it.
+
+        A dry machine changes nothing, and says so by returning False.
+        """
+        if self.dry:
+            return False
+        scratch = path + ".brain-builder.tmp"
+        with open(scratch, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(scratch, path)
+        return True
 
     def run(self, argv, changes=False):
         """Run a command; return `(exit code, output)`. Never raises.
@@ -122,12 +147,17 @@ class Machine(object):
         runner = self._runner or _run
         try:
             return runner(list(argv))
-        except Exception as failure:               # a missing launcher, a killed process
+        except Exception as failure:            # a missing launcher, a killed process
             return 1, str(failure)
 
 
 def _flat(path):
     return path.replace("\\", "/").rstrip("/")
+
+
+def _normal(path):
+    """One spelling of a folder: `~` expanded, absolute, no trailing separator."""
+    return os.path.abspath(os.path.expanduser(path)).rstrip("/\\")
 
 
 def _system():
@@ -172,7 +202,14 @@ def registry_path(machine):
 
 
 def installed(machine):
-    """Whether Obsidian is on this machine, asked the cheapest way each OS allows."""
+    """Whether Obsidian is on this machine.
+
+    A cascade rather than a table, because each OS answers a different
+    question: macOS looks for a bundle and then asks Spotlight, Windows looks
+    for an exe in two roots and then asks winget, Linux asks `PATH` and then
+    flatpak. Only the parts that *are* the same shape — how it installs, how it
+    launches — are tables.
+    """
     if machine.system == "macos":
         for folder in ("/Applications", os.path.join(machine.home, "Applications")):
             if machine.exists(os.path.join(folder, "Obsidian.app")):
@@ -205,9 +242,10 @@ def installed(machine):
 
 
 class Installer(object):
-    """One route to installing Obsidian: what to call it, and what to run."""
+    """One route to installing Obsidian: the tool it needs, and what to run."""
 
-    def __init__(self, label, argv):
+    def __init__(self, tool, label, argv):
+        self.tool = tool
         self.label = label
         self.argv = list(argv)
 
@@ -215,22 +253,26 @@ class Installer(object):
 #: One package manager per OS. Nothing is downloaded or unpacked by hand — an
 #: installer the member already has is the only route this kit will take.
 _INSTALLERS = {
-    "macos": ("brew", "Homebrew", ["brew", "install", "--cask", "obsidian"]),
-    "windows": ("winget", "winget", [
+    "macos": Installer("brew", "Homebrew", ["brew", "install", "--cask", "obsidian"]),
+    "windows": Installer("winget", "winget", [
         "winget", "install", "--id", "Obsidian.Obsidian", "-e",
         "--accept-package-agreements", "--accept-source-agreements"]),
-    "linux": ("flatpak", "Flatpak", [
+    "linux": Installer("flatpak", "Flatpak", [
         "flatpak", "install", "-y", "flathub", _APP_ID]),
+}
+
+#: How each OS is handed a URI. `{uri}` is filled in with the encoded vault link.
+_LAUNCHERS = {
+    "macos": ["open", "{uri}"],
+    "windows": ["cmd", "/c", "start", "", "{uri}"],
+    "linux": ["xdg-open", "{uri}"],
 }
 
 
 def installer(machine):
     """How Obsidian would be installed here, or `None` when nothing can."""
     route = _INSTALLERS.get(machine.system)
-    if not route:
-        return None
-    tool, label, argv = route
-    return Installer(label, argv) if machine.has(tool) else None
+    return route if route and machine.has(route.tool) else None
 
 
 # --- the vault registry ----------------------------------------------------
@@ -244,10 +286,6 @@ def vault_id(path):
     return hashlib.sha1(_normal(path).encode("utf-8")).hexdigest()[:16]
 
 
-def _normal(path):
-    return os.path.abspath(path).rstrip("/\\")
-
-
 def register(brain, machine):
     """Add the brain to Obsidian's vault list. Returns what it did.
 
@@ -256,14 +294,13 @@ def register(brain, machine):
     (a config that will not parse is left exactly as found).
     """
     path = registry_path(machine)
-    if not os.path.exists(path):
+    if not machine.exists(path):
         return "absent"
     try:
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = json.loads(machine.read(path) or "")
         if not isinstance(payload, dict):
             raise ValueError("not an object")
-    except Exception:
+    except (ValueError, TypeError):
         return "unreadable"
 
     vaults = payload.get("vaults")
@@ -271,24 +308,14 @@ def register(brain, machine):
         vaults = {}
     wanted = _normal(brain)
     for entry in vaults.values():
-        if isinstance(entry, dict) and _normal(str(entry.get("path", ""))) == wanted:
+        recorded = str(entry.get("path") or "") if isinstance(entry, dict) else ""
+        if recorded and _normal(recorded) == wanted:
             return "already"
 
-    if machine.dry:
-        return "added"
     vaults = dict(vaults)
     vaults[vault_id(brain)] = {"path": wanted, "ts": int(time.time() * 1000)}
-    payload = dict(payload, vaults=vaults)
-    _write(path, payload)
+    machine.write(path, json.dumps(dict(payload, vaults=vaults), indent=2))
     return "added"
-
-
-def _write(path, payload):
-    """Replace `obsidian.json` in one step, so a crash cannot truncate it."""
-    scratch = path + ".brain-builder.tmp"
-    with open(scratch, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
-    os.replace(scratch, path)
 
 
 # --- opening it ------------------------------------------------------------
@@ -300,14 +327,11 @@ def vault_uri(brain):
 
 def open_vault(brain, machine):
     """Hand the URI to the OS. True when the launcher accepted it."""
+    launcher = _LAUNCHERS.get(machine.system)
+    if not launcher:
+        return False
     uri = vault_uri(brain)
-    if machine.system == "macos":
-        argv = ["open", uri]
-    elif machine.system == "windows":
-        argv = ["cmd", "/c", "start", "", uri]
-    else:
-        argv = ["xdg-open", uri]
-    code, _ = machine.run(argv, changes=True)
+    code, _ = machine.run([part.format(uri=uri) for part in launcher], changes=True)
     return code == 0
 
 
@@ -321,10 +345,9 @@ class Reveal(object):
     reason that was not stated.
     """
 
-    def __init__(self, brain, dry=False):
-        self.brain = brain
-        self.name = os.path.basename(_normal(brain))
-        self.dry = dry
+    def __init__(self, brain):
+        self.brain = _normal(brain)
+        self.name = os.path.basename(self.brain)
         self.installed = False
         self.installed_now = False
         self.install = ""           # the package manager used, when one was
@@ -332,11 +355,6 @@ class Reveal(object):
         self.opened = False
         self.uri = vault_uri(brain)
         self.trouble = []
-
-    @property
-    def ok(self):
-        """Whether the member is now looking at their brain in Obsidian."""
-        return self.opened
 
     def line(self):
         """One plain line. The skill says it in its own words, not verbatim."""
@@ -351,34 +369,40 @@ class Reveal(object):
         return line
 
     def as_dict(self):
-        return {"brain": self.brain, "name": self.name, "dry": self.dry,
+        return {"brain": self.brain, "name": self.name,
                 "installed": self.installed, "installed_now": self.installed_now,
                 "install": self.install, "vault": self.vault,
-                "opened": self.opened, "uri": self.uri, "ok": self.ok,
+                "opened": self.opened, "uri": self.uri,
                 "trouble": list(self.trouble), "line": self.line()}
 
 
-def reveal(brain, machine=None, install=True):
-    """Install if needed, register the vault, open it. Never raises."""
+def reveal(brain, machine=None):
+    """Install if needed, register the vault, open it. Never raises.
+
+    Installing is not optional here and has no flag: `inspect()` is how a
+    caller finds out an install is coming, so it can say so before this runs.
+    """
     machine = machine or Machine()
-    found = Reveal(brain, dry=machine.dry)
+    found = Reveal(brain)
     found.installed = installed(machine)
 
-    if not found.installed and install:
+    if not found.installed:
         route = installer(machine)
         if route:
             found.install = route.label
             code, _ = machine.run(route.argv, changes=True)
             if code == 0:
+                # An installer that exits 0 installed it. Re-detecting here
+                # races the disk — a freshly written app bundle is not always
+                # visible the instant the installer returns.
                 found.installed = found.installed_now = True
             else:
-                found.trouble.append(
-                    "{} could not install it.".format(route.label))
+                found.trouble.append("{} could not install it.".format(route.label))
 
     if not found.installed:
         found.trouble.append(
             "Obsidian is not on this machine and could not be installed here — "
-            "download it from {} and open {} as a vault.".format(DOWNLOAD, brain))
+            "download it from {} and open {} as a vault.".format(DOWNLOAD, found.brain))
         return found
 
     found.vault = register(brain, machine)
@@ -387,44 +411,42 @@ def reveal(brain, machine=None, install=True):
     if not found.opened:
         found.trouble.append(
             "The folder is at {} — open it in Obsidian with "
-            "“Open folder as vault”.".format(brain))
-        return found
-    if found.vault in ("absent", "unreadable"):
+            "“Open folder as vault”.".format(found.brain))
+    elif found.vault in ("absent", "unreadable"):
         found.trouble.append(
             "Obsidian may ask which folder to open — choose {} as a vault.".format(
-                brain))
+                found.brain))
     return found
 
 
 def inspect(brain, machine=None):
-    """What the machine looks like, changing none of it — the `--check` answer."""
+    """What the machine looks like, changing none of it — the `--check` answer.
+
+    This is what makes "say it before you install it" possible: it names the
+    package manager an install would use, without using it.
+    """
     quiet = (machine or Machine()).readonly()
     route = installer(quiet)
+    status = register(brain, quiet)
     return {"brain": _normal(brain), "system": quiet.system,
             "installed": installed(quiet),
             "installer": route.label if route else None,
             "config": registry_path(quiet), "uri": vault_uri(brain),
-            "vault": _vault_state(brain, quiet)}
-
-
-def _vault_state(brain, machine):
-    """`registered` · `unregistered` · `absent` · `unreadable`, writing nothing."""
-    status = register(brain, machine.readonly())
-    return {"already": "registered", "added": "unregistered"}.get(status, status)
+            "vault": {"already": "registered",
+                      "added": "unregistered"}.get(status, status)}
 
 
 # --- cli -------------------------------------------------------------------
 
-USAGE = ("usage: open_in_obsidian.py <brain> [--json] [--no-install] [--dry-run]\n"
-         "       open_in_obsidian.py <brain> --check [--json]\n")
+USAGE = ("usage: open_in_obsidian.py <brain> [--json] [--home DIR]\n"
+         "       open_in_obsidian.py <brain> --check [--json] [--home DIR]\n")
 
 
 def main(argv):
     try:
         positional, options = cli.scan(
-            argv, options={"--check": False, "--json": False,
-                           "--no-install": False, "--dry-run": False},
-            flags=("--check", "--json", "--no-install", "--dry-run"))
+            argv, options={"--check": False, "--json": False, "--home": None},
+            flags=("--check", "--json"))
     except cli.UsageError as failure:
         sys.stderr.write("open_in_obsidian.py: {}\n{}".format(failure, USAGE))
         return 2
@@ -432,21 +454,23 @@ def main(argv):
     if len(positional) != 1:
         sys.stderr.write(USAGE)
         return 2
-    brain = positional[0]
+    brain = os.path.expanduser(positional[0])
     if not os.path.isdir(brain):
         sys.stderr.write("open_in_obsidian.py: no brain at {}\n{}".format(brain, USAGE))
         return 2
 
+    home = options["--home"]
+    machine = Machine(home=os.path.expanduser(home) if home else None)
+
     if options["--check"]:
-        print(json.dumps(inspect(brain), indent=2))
+        print(json.dumps(inspect(brain, machine), indent=2))
         return 0
 
-    found = reveal(brain, Machine(dry=bool(options["--dry-run"])),
-                   install=not options["--no-install"])
+    found = reveal(brain, machine)
     print(json.dumps(found.as_dict(), indent=2) if options["--json"] else found.line())
-    #: A garnish never reports a broken build — but it does not claim success it
-    #: did not have either. The skill turns a 1 here into one calm line.
-    return 0 if (found.ok or found.dry) else 1
+    # A garnish never reports a broken build — but it does not claim a success it
+    # did not have either. The skill turns a 1 here into one calm line.
+    return 0 if found.opened else 1
 
 
 if __name__ == "__main__":

@@ -59,8 +59,11 @@ invocation. It interviews you to shared understanding rather than question
 coverage (a full mind-dump earns zero questions), proposes the source list
 grouped by platform for you to edit by talking, states the plan and the
 transcription cost once, then builds: ingest → taxonomy → pages → router →
-lint. It finishes by attaching the brain and answering one of your own questions
-with it. You are never asked to do architecture.
+lint. It finishes by attaching the brain, answering one of your own questions
+with it, and opening it in Obsidian so you can see your material drawn as linked
+pages — it installs Obsidian if you don't have it and tells you before it does,
+and nothing about the brain depends on it. You are never asked to do
+architecture.
 
 **`brain-toggle`** — the attach/detach skill. "Turn on my hormozi brain."
 Symlinks a brain into a skills directory (Claude Code, Claude Agent SDK, Codex,

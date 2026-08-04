@@ -76,6 +76,7 @@ library and name the `pip install` line if it is missing:
 | Check the figures | `python3 "$KIT/verify_numbers.py" <brain>` |
 | Generate the router | `python3 "$KIT/gen_router.py" <brain>` |
 | Lint (last — it checks the router too) | `python3 "$KIT/lint.py" <brain>` |
+| Show the finished brain as a picture | `python3 "$KIT/open_in_obsidian.py" <brain> [--check]` |
 
 ## How to say it
 
@@ -384,7 +385,35 @@ seen it work.
 2. **Demo it** with one of the member's **own** questions from Phase 1 — asked
    verbatim, answered by the brain. Their question, their material, their
    answer, in front of them.
-3. **Report in a few lines**: what was built, how many sources and pages, where
+3. **Show it as a picture.** A brain is small pages linked to each other, which
+   is exactly what Obsidian draws — so end by opening it there and letting the
+   member see their own material as a map of connected dots.
+
+   ```bash
+   python3 "$KIT/open_in_obsidian.py" <brain> --check  # look first, changes nothing
+   python3 "$KIT/open_in_obsidian.py" <brain>          # installs if needed, then opens
+   ```
+
+   **Look first, because the second command may install something.** `--check`
+   answers `installed` and `installer`. If `installed` is `false`, say the line
+   *before* you run the second command — *"Installing Obsidian — a free app that
+   shows your brain as a visual map of linked pages"* — and then run it. Never
+   install anything silently. If `installed` is `true` there is nothing to
+   announce; just open it.
+
+   Opening adds the brain folder to Obsidian as a *vault* — Obsidian's word for
+   a folder it reads — and shows it. That is all that can be automated: there is
+   no link that goes straight to the picture, so **name the one click**:
+   *"press Cmd+G — Ctrl+G on Windows and Linux — or the graph icon down the left
+   side, and you'll see every page and every link between them."*
+
+   **This cannot fail the build.** When it can't open — no way to install, no
+   Obsidian, a launch that didn't take — it exits 1 and prints what to do
+   instead: the download link, or which folder to open as a vault. That is one
+   calm line to the member and nothing more. The brain is finished either way,
+   and this is the one step worth losing.
+
+4. **Report in a few lines**: what was built, how many sources and pages, where
    it lives, the one summary line for anything that failed, and what the Known
    gaps say. Plain words throughout — this is the last thing they read, and it is
    the easiest place to slip back into the kit's own vocabulary.
